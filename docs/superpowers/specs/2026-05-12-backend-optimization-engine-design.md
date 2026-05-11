@@ -10,7 +10,7 @@ Replace the client-side `planGenerator.ts` with a real server-side optimization 
 
 **Stack:** Python 3.12, FastAPI, OR-Tools CP-SAT, PostgreSQL, Redis + RQ
 **Deployment:** Single-server Docker Compose (nginx, FastAPI, RQ worker, Redis, PostgreSQL)
-**Frontend impact:** Minimal — same React components, swap `planGenerator.ts` calls for API fetches
+**Frontend impact:** Moderate — same React component structure, but `planGenerator.ts` replaced by API fetch layer with polling, error states, and offline fallback
 
 ## 2. Architecture
 
@@ -108,23 +108,38 @@ sum(harvest_kg[crop, grid, week]) >= minKgPerWeek[crop]  for committed crops
 
 ### Objective Function
 
+**Maximize-revenue mode** (default):
 ```python
 maximize sum(revenue_per_grid_week[crop] * x[crop, grid, week])
 
 # Soft penalties (weighted):
-- nursery_overflow_penalty * overflow
-- commitment_shortfall_penalty * shortfall
-- spatial_suboptimal_penalty * bad_placement_score
+- nursery_overflow_penalty * overflow         # weight: 50
+- commitment_shortfall_penalty * shortfall     # weight: 100
+- spatial_suboptimal_penalty * bad_placement   # weight: 10
 ```
+
+**Minimize-stockout mode:**
+```python
+# Primary: minimize weeks where harvest < demand
+minimize sum(stockout_penalty[crop, week] * max(0, demand[crop, week] - harvest[crop, week]))
+
+# Secondary: still maximize revenue (lower weight)
+maximize sum(revenue_per_grid_week[crop] * x[crop, grid, week]) * 0.3
+
+# Soft penalties same as above
+```
+
+Stockout mode penalizes any week where harvest falls below expected demand, weighted by crop priority. Revenue is still optimized but at reduced weight.
 
 ### Warm-Start Replanning
 
 When a disruption occurs:
-1. Current plan provides warm-start hints (fixed variables for past weeks)
-2. Disruption constraints mark dead grids as unavailable
-3. Modified objective minimizes deviation from original plan + maximizes recovery revenue
+1. Past weeks are **fixed** (immutable history). Only current week onward is re-optimized.
+2. Dead/diseased grids marked as permanently unavailable for remaining horizon.
+3. Solver receives the original plan as solution hints for fast convergence.
+4. Objective: maximize recovery revenue + minimize deviation from original allocations.
 
-Replanning is an incremental adjustment, not a full re-solve.
+This means future weeks can be fully reorganized to recover from the disruption, while past weeks remain locked.
 
 ### Solver Flow
 
@@ -138,11 +153,18 @@ POST /plans/generate
   → Return plan ID + results
 ```
 
+**Solver result states:**
+- `OPTIMAL` — proven optimal solution found. Status: `completed`.
+- `FEASIBLE` — good solution found within timeout but not proven optimal. Status: `completed` (with `solver_log.optimality_gap`).
+- `INFEASIBLE` — constraints are contradictory (e.g., commitments exceed farm capacity). Status: `failed`. Response includes which constraints conflict and suggested relaxations (reduce commitments or add grids).
+- `NO_SOLUTION_FOUND` — timeout reached with no feasible solution. Status: `failed`. Increase timeout or reduce problem size.
+
 ## 5. API Design
 
 ### Endpoints
 
 ```
+POST   /farms                           # Create farm (from setup wizard)
 GET    /farms/{farm_id}                 # Farm config
 PUT    /farms/{farm_id}                 # Update farm
 GET    /crops                           # Crop library
@@ -185,6 +207,21 @@ Response:
 { "plan_id": "uuid", "status": "solving", "poll_url": "/plans/{plan_id}/status" }
 ```
 
+**POST /farms**
+```json
+{
+  "name": "Green Farm",
+  "location": "Bangkok",
+  "rows": 4,
+  "columns": 12,
+  "growing_system": "hydroponic",
+  "nursery_tray_count": 30,
+  "nursery_tray_cells": 200,
+  "nursery_buffer_pct": 10
+}
+```
+Response: `{ "id": "uuid", ...farm }`
+
 **GET /plans/{plan_id}** (when completed)
 ```json
 {
@@ -193,11 +230,72 @@ Response:
   "rows": 4,
   "columns": 12,
   "total_grids": 48,
-  "cells": [{"index": 0, "crop_id": "basil", "status": "planned"}],
-  "allocations": [{"crop_id": "basil", "grids_allocated": 24, "revenue_per_week": 28.8}],
-  "nursery_occupancy": [{"week": 1, "trays_in_use": 12, "total_trays": 30}],
-  "nursery_batches": [{"id": "basil-w1", "crop_id": "basil", "seed_week": 1}],
-  "revenue": {"total_per_week": 86.4, "max_possible": 86.4, "efficiency_pct": 100},
+  "cells": [
+    {
+      "index": 0,
+      "crop_id": "basil",
+      "status": "planned",
+      "week_started": 0,
+      "week_harvest_expected": 6
+    }
+  ],
+  "allocations": [
+    {
+      "crop_id": "basil",
+      "grids_allocated": 24,
+      "grids_per_section": 3,
+      "harvest_cycle_weeks": 6,
+      "sustainable_kg_per_week": 12.0,
+      "revenue_per_week": 28.8,
+      "revenue_per_grid_week": 1.2,
+      "seedlings_per_cycle": 360,
+      "trays_per_cycle": 2
+    }
+  ],
+  "rotations": [
+    {
+      "crop_id": "basil",
+      "sections": 8,
+      "grids_per_section": 3,
+      "section_start_weeks": [1, 2, 3, 4, 5, 6, 7, 8],
+      "harvest_weeks": [6, 7, 8, 9, 10, 11, 12, 13]
+    }
+  ],
+  "nursery_occupancy": [
+    {
+      "week": 1,
+      "trays_in_use": 12,
+      "trays_available": 18,
+      "total_trays": 30,
+      "batches": [
+        {
+          "batch_id": "basil-w1",
+          "crop_id": "basil",
+          "tray_count": 2,
+          "week_started": 1,
+          "week_freed": 3
+        }
+      ]
+    }
+  ],
+  "nursery_batches": [
+    {
+      "id": "basil-w1",
+      "crop_id": "basil",
+      "seed_week": 1,
+      "transplant_week": 3,
+      "seedling_count": 360,
+      "tray_count": 2,
+      "status": "planned"
+    }
+  ],
+  "revenue": {
+    "total_per_week": 86.4,
+    "max_possible": 86.4,
+    "revenue_gap": 0,
+    "revenue_by_crop": {"basil": 28.8, "lettuce": 57.6},
+    "opportunity_cost_of_commitments": 0
+  },
   "horizon_weeks": 12
 }
 ```
@@ -208,11 +306,34 @@ Response:
   "type": "crop-death",
   "grid_indexes": [5, 6, 7],
   "crop_id": "basil",
+  "week": 3,
   "description": "Root rot detected in Zone B"
 }
 ```
 
-Response shapes intentionally mirror the current `GeneratedPlanData` TypeScript type. Frontend changes: replace `generatePlanData()` calls with `fetch()`, add solver status polling. Component structure stays the same.
+**POST /plans/{plan_id}/replan** — Response:
+```json
+{
+  "replanned_plan": { ...full plan shape (same as GET /plans/{plan_id}) },
+  "replant_options": [
+    {
+      "crop_id": "arugula",
+      "description": "Fast 4-week cycle, high revenue. Seedlings available in nursery.",
+      "revenue_recovered": 18.0,
+      "weeks_until_harvest": 4,
+      "seedlings_available": true,
+      "recommended": true
+    }
+  ],
+  "deviation_from_original": {
+    "grids_changed": 3,
+    "revenue_delta_per_week": -10.8,
+    "nursery_impact": "2 trays freed, 1 new batch needed"
+  }
+}
+```
+
+Response shapes mirror the current `GeneratedPlanData` TypeScript type. All fields used by the frontend are included. Frontend changes: replace `generatePlanData()` calls with `fetch()`, add solver status polling and error state handling. Component structure stays the same.
 
 ## 6. Data Model (PostgreSQL)
 
@@ -323,6 +444,7 @@ Response shapes intentionally mirror the current `GeneratedPlanData` TypeScript 
 | grid_indexes | INT[] | |
 | description | TEXT | |
 | revenue_impact | REAL | |
+| batch_id | TEXT | nullable, links to nursery batch |
 | completed | BOOLEAN | default false |
 | completed_at | TIMESTAMPTZ | |
 
@@ -380,7 +502,69 @@ demand_forecast[crop_id, week] = {
 
 Feeds the solver as soft constraints — bonus for matching forecast demand without sacrificing confirmed commitments.
 
-## 9. Deployment
+## 9. Operational Concerns
+
+### Error Responses
+
+All errors use a consistent envelope:
+```json
+{
+  "error": {
+    "code": "SOLVER_INFEASIBLE",
+    "message": "Constraints are contradictory: commitments require 60 grids but farm has 48.",
+    "details": {"conflicting_constraints": ["lettuce commitment: 50kg/week needs 50 grids", "basil commitment: 20kg/week needs 20 grids"]}
+  }
+}
+```
+
+| HTTP Code | Code | Meaning |
+|-----------|------|---------|
+| 400 | VALIDATION_ERROR | Invalid request (Pydantic rejection) |
+| 404 | NOT_FOUND | Farm, plan, or crop not found |
+| 409 | PLAN_LOCKED | Cannot modify a confirmed plan |
+| 422 | SOLVER_INFEASIBLE | Constraints contradictory |
+| 422 | SOLVER_TIMEOUT | No solution found within timeout |
+| 429 | RATE_LIMITED | Too many solver requests |
+| 503 | SOLVER_BUSY | Max concurrent solver jobs reached |
+
+### Concurrency Limits
+
+- Single RQ worker process (CPU-bound solver doesn't benefit from parallelism on 2 vCPU)
+- Max 1 concurrent solver job. Additional requests queue with a depth limit of 5.
+- Solver timeout: 10s default, configurable per request up to 30s.
+- If queue is full, return 503 SOLVER_BUSY immediately.
+
+### Authentication
+
+Phase 1: Simple API key header (`X-API-Key`). One key per farm. Sufficient for single-operator deployment.
+
+Phase 2 (future): JWT tokens with farm-scoped claims, user roles (owner, manager, worker).
+
+### CORS
+
+FastAPI configured with CORS middleware allowing the frontend origin. In Docker deployment, both are served from the same domain via nginx (no CORS needed in production). CORS is for local development only.
+
+### Testing Strategy
+
+| Layer | Tool | What to test |
+|-------|------|-------------|
+| Solver logic | pytest | Constraint satisfaction, optimality for small instances, edge cases (empty farm, single crop, overcommitted) |
+| API endpoints | pytest + httpx | Request validation, response shapes, error codes, status transitions |
+| Services | pytest | Nursery scheduling, cost calculations, forecast models |
+| Integration | pytest | Full flow: create farm → generate plan → confirm → advance week → disrupt → replan |
+| Solver performance | manual benchmark | Timing for typical farm sizes (4x12, 6x20, 10x30) with varying crop counts |
+
+### Database Initialization
+
+- Alembic for schema migrations
+- Seed script for `crops` table (runs on first deploy, idempotent via `INSERT ... ON CONFLICT DO NOTHING`)
+- No manual SQL — everything through Alembic + seed scripts
+
+### Frontend Offline Fallback
+
+The current client-side `planGenerator.ts` remains bundled as a fallback. When the backend is unreachable, the frontend detects the failure and falls back to local plan generation with a visual indicator ("Offline mode — using local optimizer"). This preserves the demo/prototype experience.
+
+## 10. Deployment
 
 ### Docker Compose
 
