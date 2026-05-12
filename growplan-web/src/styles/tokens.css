@@ -1,0 +1,62 @@
+:root {
+  /* Surfaces */
+  --color-bg-base: #0A0A0B;
+  --color-bg-surface: #141416;
+  --color-bg-elevated: #1C1C1F;
+  --color-bg-hover: #242428;
+
+  /* Borders */
+  --color-border: #2A2A2E;
+  --color-border-focus: #3A3A3F;
+
+  /* Text */
+  --color-text-primary: #E8E8EA;
+  --color-text-secondary: #8B8B8E;
+  --color-text-muted: #555558;
+
+  /* Accent */
+  --color-accent: #00E676;
+  --color-accent-dim: #00C864;
+  --color-accent-bg: rgba(0, 230, 118, 0.08);
+
+  /* Status */
+  --color-success: #00E676;
+  --color-warning: #FFB300;
+  --color-error: #FF5252;
+  --color-info: #40C4FF;
+
+  /* Chart palette */
+  --color-chart-1: #00E676;
+  --color-chart-2: #40C4FF;
+  --color-chart-3: #FFB300;
+  --color-chart-4: #FF5252;
+  --color-chart-5: #B388FF;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  --text-xs: 0.6875rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-display: 3rem;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+
+  /* Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Components */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
