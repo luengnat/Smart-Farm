@@ -106,8 +106,12 @@ function saveWizardDraft(data: { page: string; setupFarmData?: SetupFarmData; se
 }
 
 function loadWizardDraft(): { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[] } | null {
-  const stored = localStorage.getItem(WIZARD_KEY)
-  return stored ? JSON.parse(stored) : null
+  try {
+    const stored = localStorage.getItem(WIZARD_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
 }
 
 function clearWizardDraft() {

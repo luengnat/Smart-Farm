@@ -151,9 +151,9 @@ async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
 
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    await fetch(`${API_BASE}/health`)
-    backendAvailable = true
-    return true
+    const resp = await fetch(`${API_BASE}/health`)
+    backendAvailable = resp.ok
+    return resp.ok
   } catch {
     backendAvailable = false
     return false
