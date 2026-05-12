@@ -25,10 +25,13 @@
 - farm_id: int (FK → farms.id, CASCADE)
 - role: enum (`owner`, `manager`, `viewer`)
 - unique constraint on (user_id, farm_id)
+- Phase 1 constraint: only `owner` role is created. Backend rejects attempts to create non-owner FarmMember records. Phase 3 enables manager/viewer roles.
 
 ### Auth Endpoints
 
 - `POST /auth/register` — body: {email, password, display_name} → returns {user, token}
+  - Password validation: min 8 characters, enforced on backend (frontend mirrors rules)
+  - Email validation: standard email format
 - `POST /auth/login` — body: {email, password} → returns {user, token}
 - `GET /auth/me` — Bearer token → returns current user
 
@@ -37,7 +40,8 @@
 - Password hashing: passlib with bcrypt
 - JWT: python-jose with HS256, 24h expiry
 - Token payload: {sub: user_id, exp: timestamp}
-- JWT secret from environment variable `JWT_SECRET` (required, fail on missing)
+- JWT secret from environment variable `GP_JWT_SECRET` (required, fail on missing). Generate with `openssl rand -hex 32`.
+- Auth header: replaces the current `X-API-Key` demo header entirely. All protected endpoints use `Authorization: Bearer <token>`.
 - Auth dependency: `get_current_user` FastAPI dependency that extracts Bearer token from Authorization header, validates JWT, returns User object
 - All protected routes use `Depends(get_current_user)`
 
@@ -53,6 +57,7 @@
 
 - `003_users_and_farm_members.py` — creates users and farm_members tables
 - Adds user_id FK to farms table (nullable initially, set on new farm creation)
+- **Data migration**: App is pre-production (no real user data). Migration creates a default system user (email from `GP_DEFAULT_USER_EMAIL` env var, or `admin@growplan.local`) and assigns all existing farms to that user. This allows existing test data to remain accessible during development.
 
 ---
 
@@ -156,6 +161,7 @@
 - `src/contexts/AuthContext.tsx` — Auth provider, useAuth hook
 - `src/pages/LoginPage.tsx` — Login form
 - `src/pages/RegisterPage.tsx` — Register form
+- `src/types/auth.ts` — User, LoginRequest, RegisterRequest, AuthResponse types
 
 ### Frontend — Deleted Files
 - `src/lib/planGenerator.ts`
@@ -188,7 +194,7 @@
 ## 6. Testing Strategy
 
 ### Backend Tests
-- Register endpoint: success, duplicate email, short password validation
+- Register endpoint: success, duplicate email, short password validation, invalid email
 - Login endpoint: success, wrong password, non-existent user
 - Auth middleware: valid token, expired token, missing token
 - Farm access: owner can CRUD, non-member gets 403
