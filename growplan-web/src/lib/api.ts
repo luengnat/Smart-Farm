@@ -35,7 +35,10 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}))
     const message = body.error?.message ?? body.detail ?? `API error ${resp.status}`
-    if (resp.status !== 401) {
+    if (resp.status === 401) {
+      sessionStorage.removeItem('gp_token')
+      window.location.reload()
+    } else {
       toast.error(message)
     }
     throw new Error(message)
