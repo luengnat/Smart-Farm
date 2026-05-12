@@ -54,7 +54,7 @@ def compute_analytics(
             seeds += (
                 grids * crop.get("seedlings_per_grid", 20)
                 * crop.get("cost_per_seedling", 0.02)
-                / crop.get("weeks_on_panel", 6)
+                / max(crop.get("weeks_on_panel", 6), 1)
             )
         total_grids = sum(a["grids_allocated"] for a in allocations)
         energy = 20.0 + total_grids * 0.50 + 30 * 0.10
