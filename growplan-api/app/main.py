@@ -1,3 +1,5 @@
+import hmac
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,8 +19,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["X-API-Key", "Content-Type"],
 )
 
 
@@ -26,8 +28,8 @@ app.add_middleware(
 async def api_key_auth(request: Request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
-    api_key = request.headers.get("X-API-Key")
-    if api_key != settings.api_key:
+    api_key = request.headers.get("X-API-Key") or ""
+    if not hmac.compare_digest(api_key, settings.api_key):
         return JSONResponse(
             status_code=401,
             content={

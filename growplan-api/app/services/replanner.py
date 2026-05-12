@@ -65,7 +65,7 @@ def replan(
         "commitments": plan.goal_commitments or {},
     }
 
-    result = solve_plan(farm_dict, crops_list, goal_dict)
+    result = solve_plan(farm_dict, crops_list, goal_dict, excluded_grids=dead_indexes)
 
     if result["status"] in ("OPTIMAL", "FEASIBLE"):
         # Mark dead cells

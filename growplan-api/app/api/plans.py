@@ -9,6 +9,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.disruption import Disruption
 from app.models.farm import Farm
@@ -62,6 +63,12 @@ def generate_plan(
 
     if _is_test_mode():
         run_solver(plan.id, db=db)
+    else:
+        import redis
+        from rq import Queue
+
+        q = Queue(connection=redis.from_url(settings.redis_url))
+        q.enqueue(run_solver, plan.id)
 
     return PlanGenerateResponse(
         plan_id=plan.id,

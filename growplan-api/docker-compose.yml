@@ -4,25 +4,30 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: growplan
-      POSTGRES_PASSWORD: growplan
-      POSTGRES_DB: growplan
+      POSTGRES_USER: ${GP_POSTGRES_USER:-growplan}
+      POSTGRES_PASSWORD: ${GP_POSTGRES_PASSWORD:?Set GP_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${GP_POSTGRES_DB:-growplan}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U growplan"]
+      test: ["CMD-SHELL", "pg_isready -U ${GP_POSTGRES_USER:-growplan}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
+    command: >
+      redis-server
+      --requirepass ${GP_REDIS_PASSWORD:?Set GP_REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${GP_REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -32,9 +37,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      GP_DATABASE_URL: postgresql+psycopg2://growplan:growplan@postgres:5432/growplan
-      GP_REDIS_URL: redis://redis:6379/0
-      GP_API_KEY: ${GP_API_KEY:-dev-key-change-in-production}
+      GP_DATABASE_URL: postgresql+psycopg2://${GP_POSTGRES_USER:-growplan}:${GP_POSTGRES_PASSWORD}@postgres:5432/${GP_POSTGRES_DB:-growplan}
+      GP_REDIS_URL: redis://:${GP_REDIS_PASSWORD}@redis:6379/0
+      GP_API_KEY: ${GP_API_KEY:?Set GP_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,11 +48,11 @@ services:
 
   rq-worker:
     build: .
-    command: rq worker --url redis://redis:6379/0 default
+    command: rq worker --url redis://:${GP_REDIS_PASSWORD}@redis:6379/0 default
     environment:
-      GP_DATABASE_URL: postgresql+psycopg2://growplan:growplan@postgres:5432/growplan
-      GP_REDIS_URL: redis://redis:6379/0
-      GP_API_KEY: ${GP_API_KEY:-dev-key-change-in-production}
+      GP_DATABASE_URL: postgresql+psycopg2://${GP_POSTGRES_USER:-growplan}:${GP_POSTGRES_PASSWORD}@postgres:5432/${GP_POSTGRES_DB:-growplan}
+      GP_REDIS_URL: redis://:${GP_REDIS_PASSWORD}@redis:6379/0
+      GP_API_KEY: ${GP_API_KEY:?Set GP_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

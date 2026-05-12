@@ -1,4 +1,9 @@
-def moving_average(history, crop_id, weeks=4):
+from typing import Any
+
+
+def moving_average(
+    history: list[dict[str, Any]], crop_id: str, weeks: int = 4
+) -> float:
     """Simple moving average over the last N weeks of sales data for a crop."""
     crop_data = [h["kg_sold"] for h in history if h["crop_id"] == crop_id]
     recent = crop_data[-weeks:] if len(crop_data) >= weeks else crop_data
@@ -7,7 +12,9 @@ def moving_average(history, crop_id, weeks=4):
     return sum(recent) / len(recent)
 
 
-def exponential_smoothing(history, crop_id, alpha=0.3):
+def exponential_smoothing(
+    history: list[dict[str, Any]], crop_id: str, alpha: float = 0.3
+) -> float:
     """Exponential smoothing forecast for a crop.
 
     alpha: smoothing factor (0-1). Higher = more weight on recent data.
@@ -25,7 +32,7 @@ def exponential_smoothing(history, crop_id, alpha=0.3):
     return result
 
 
-def forecast_demand(history, crop_id):
+def forecast_demand(history: list[dict[str, Any]], crop_id: str) -> float:
     """Pick forecast model based on data length.
 
     Phase 1: moving average for short history, exponential smoothing for longer.

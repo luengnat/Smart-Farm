@@ -34,11 +34,14 @@ def build_model(
     farm: dict,
     crops: list[dict],
     goal: dict,
+    excluded_grids: set[int] | None = None,
 ) -> tuple[cp_model.CpModel, dict]:
     """Build a CP-SAT model for farm plan optimization.
 
     Returns the model and a context dict holding variable references and
     metadata needed for result extraction.
+
+    excluded_grids: grid indexes that must not be assigned (e.g. dead grids).
     """
     model = cp_model.CpModel()
 
@@ -52,6 +55,7 @@ def build_model(
 
     crop_ids = [c["id"] for c in crops]
     crop_map: dict[str, dict] = {c["id"]: c for c in crops}
+    excluded = excluded_grids or set()
 
     # ---- Decision variables ----
 
@@ -81,6 +85,16 @@ def build_model(
             n[cid, w] = model.NewIntVar(0, nursery_total_trays, f"n_{cid}_{w}")
 
     # ---- Constraints ----
+
+    # 0. Fix excluded grids to zero (dead/unavailable cells).
+    for g in excluded:
+        for cid in crop_ids:
+            for w in range(horizon):
+                if (cid, g, w) in x:
+                    model.Add(x[cid, g, w] == 0)
+            for w in range(horizon):
+                if (cid, g, w) in s:
+                    model.Add(s[cid, g, w] == 0)
 
     # 1. Link start variables to occupancy variables.
     #    If s[c, g, w] = 1, then x[c, g, w'] = 1 for all w' in [w, w+weeks_on_panel-1]
@@ -142,8 +156,8 @@ def build_model(
         # Sum trays across all crops for this week
         model.Add(sum(n[cid, w] for cid in crop_ids) <= effective_trays)
 
-    # 6. Link nursery seeding to planting: if a crop starts at grid g week w,
-    #    there must be nursery activity at week w - nursery_lead_weeks.
+    # 6. Link nursery seeding to planting: sum nursery trays required across
+    #    all grids starting a crop in a given week.
     for crop in crops:
         cid = crop["id"]
         lead = crop["nursery_lead_weeks"]
@@ -158,15 +172,21 @@ def build_model(
                 // (tray_cells * germ)
             ),
         )
-        for g in range(total_grids):
-            wp = crop["weeks_on_panel"]
-            for w in range(horizon):
-                if w + wp > horizon:
-                    continue
-                if w - lead >= 0:
-                    # Starting a crop at week w requires nursery seeding at w-lead
-                    model.Add(n[cid, w - lead] >= trays_per_grid).OnlyEnforceIf(
-                        s[cid, g, w]
+        wp = crop["weeks_on_panel"]
+        for w in range(horizon):
+            if w + wp > horizon:
+                continue
+            if w - lead >= 0:
+                # Sum of start variables for this crop at this transplant week
+                starts_this_week = [
+                    s[cid, g, w]
+                    for g in range(total_grids)
+                    if (cid, g, w) in s
+                ]
+                if starts_this_week:
+                    model.Add(
+                        n[cid, w - lead]
+                        >= trays_per_grid * sum(starts_this_week)
                     )
 
     # ---- Objective components ----
@@ -174,15 +194,16 @@ def build_model(
     revenue_terms: list[cp_model.LinearExpr] = []
     spatial_penalty_terms: list[cp_model.LinearExpr] = []
 
-    # Revenue contribution
+    # Revenue contribution — accumulate only at start variables so each
+    # planting cycle contributes once (not per grid-week of occupancy).
     for crop in crops:
         cid = crop["id"]
+        rev_coeff = int(crop["yield_per_grid"] * crop["price_per_kg"] * 10)
         for g in range(total_grids):
+            wp = crop["weeks_on_panel"]
             for w in range(horizon):
-                # Revenue is yield * price per grid-week of occupancy
-                # Scale by 10 to keep integers
-                rev_coeff = int(crop["yield_per_grid"] * crop["price_per_kg"] * 10)
-                revenue_terms.append(rev_coeff * x[cid, g, w])
+                if w + wp <= horizon and (cid, g, w) in s:
+                    revenue_terms.append(rev_coeff * s[cid, g, w])
 
     # Spatial scoring: edge preference and neighbor bonus
     for crop in crops:
@@ -316,6 +337,7 @@ def solve_plan(
     crops: list[dict],
     goal: dict,
     timeout_seconds: int = 10,
+    excluded_grids: set[int] | None = None,
 ) -> dict:
     """Solve the farm plan optimization problem.
 
@@ -323,7 +345,7 @@ def solve_plan(
     """
     start_time = time.monotonic()
 
-    model, ctx = build_model(farm, crops, goal)
+    model, ctx = build_model(farm, crops, goal, excluded_grids=excluded_grids)
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout_seconds
