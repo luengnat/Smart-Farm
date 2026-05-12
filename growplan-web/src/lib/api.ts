@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast'
 import { generatePlanData } from './planGenerator'
 import type {
   AnalyticsData,
@@ -30,7 +31,9 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   })
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}))
-    throw new Error(body.error?.message ?? `API error ${resp.status}`)
+    const message = body.error?.message ?? `API error ${resp.status}`
+    toast.error(message)
+    throw new Error(message)
   }
   return resp.json()
 }

@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import './App.css'
 import { cropLibrary, type CropId } from './constants/crops'
 import { generatePlanData } from './lib/planGenerator'
+import { checkBackendHealth } from './lib/api'
 import { DefineGoalPage } from './pages/DefineGoalPage'
 import { ConfirmPlanPage } from './pages/ConfirmPlanPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -98,20 +99,52 @@ function saveToStorage(key: string, value: unknown): void {
   } catch { /* ignore quota errors */ }
 }
 
+const WIZARD_KEY = 'gp_wizard_draft'
+
+function saveWizardDraft(data: { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[] }) {
+  saveToStorage(WIZARD_KEY, data)
+}
+
+function loadWizardDraft(): { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[] } | null {
+  const stored = localStorage.getItem(WIZARD_KEY)
+  return stored ? JSON.parse(stored) : null
+}
+
+function clearWizardDraft() {
+  localStorage.removeItem(WIZARD_KEY)
+}
+
 function App() {
   const initialSetupFarmData = createInitialSetupFarmData()
   const initialSelectedCropIds = cropLibrary.map((crop) => crop.id)
+  const draft = loadWizardDraft()
 
-  const [page, setPage] = useState<Page>('welcome')
-  const [setupFarmData, setSetupFarmData] = useState<SetupFarmData>(initialSetupFarmData)
-  const [selectedCropIds, setSelectedCropIds] = useState<CropId[]>(initialSelectedCropIds)
+  const [page, setPage] = useState<Page>((draft?.page as Page) || 'welcome')
+  const [setupFarmData, setSetupFarmData] = useState<SetupFarmData>(draft?.setupFarmData || initialSetupFarmData)
+  const [selectedCropIds, setSelectedCropIds] = useState<CropId[]>(draft?.selectedCropIds || initialSelectedCropIds)
   const [goalData, setGoalData] = useState<GoalData>(
-    createInitialGoalData(initialSetupFarmData, initialSelectedCropIds),
+    createInitialGoalData(draft?.setupFarmData || initialSetupFarmData, draft?.selectedCropIds || initialSelectedCropIds),
   )
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlanData | null>(null)
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([])
   const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
   const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
+
+  const [backendOnline, setBackendOnline] = useState(true)
+
+  useEffect(() => {
+    checkBackendHealth().then(setBackendOnline)
+  }, [])
+
+  if (!backendOnline && (page === 'analytics' || page === 'crop-comparison' || page === 'plan-history')) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <h2>Backend Required</h2>
+        <p style={{ color: '#888' }}>Start the API server to see analytics data</p>
+        <button onClick={() => setPage('dashboard')}>Back to Dashboard</button>
+      </div>
+    )
+  }
 
   if (page === 'analytics') {
     return (
@@ -231,7 +264,7 @@ function App() {
         selectedCropIds={selectedCropIds}
         goalData={goalData}
         generatedPlan={generatedPlan}
-        onGeneratePlan={(nextPlan) => setGeneratedPlan(nextPlan)}
+        onGeneratePlan={(nextPlan) => { setGeneratedPlan(nextPlan); clearWizardDraft() }}
         onBackToDefineGoal={() => setPage('define-goal')}
         onContinue={() => setPage('confirm-plan')}
       />
@@ -252,6 +285,7 @@ function App() {
             selectedCropIds,
             goalData: nextGoalData,
           }))
+          saveWizardDraft({ page: 'generate-plan', selectedCropIds })
           setPage('generate-plan')
         }}
       />
@@ -271,6 +305,7 @@ function App() {
             cropGoals: createBalancedCropGoals(setupFarmData, nextSelectedCropIds),
           }))
           setGeneratedPlan(null)
+          saveWizardDraft({ page: 'define-goal', selectedCropIds: nextSelectedCropIds })
           setPage('define-goal')
         }}
       />
@@ -289,6 +324,7 @@ function App() {
             cropGoals: createBalancedCropGoals(nextSetupFarmData, selectedCropIds),
           }))
           setGeneratedPlan(null)
+          saveWizardDraft({ page: 'select-crops', setupFarmData: nextSetupFarmData, selectedCropIds })
           setPage('select-crops')
         }}
       />
@@ -297,6 +333,14 @@ function App() {
 
   return (
     <>
+      {!backendOnline && (
+        <div style={{
+          padding: '0.5rem', background: '#fff3cd', borderBottom: '1px solid #ffc107',
+          textAlign: 'center', fontSize: '0.85rem', color: '#856404',
+        }}>
+          Running in offline mode — analytics and history require the backend
+        </div>
+      )}
       <Toaster position="top-right" />
       <WelcomePage
         onOpenEmployer={() => setPage('setup-farm')}
