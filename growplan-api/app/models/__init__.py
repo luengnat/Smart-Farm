@@ -4,6 +4,7 @@ from app.models.plan import Plan, GridCell, Allocation
 from app.models.nursery import NurseryBatch
 from app.models.disruption import Disruption
 from app.models.action import Action
+from app.models.snapshot import PlanSnapshot
 
 __all__ = [
     "Farm",
@@ -14,4 +15,5 @@ __all__ = [
     "NurseryBatch",
     "Disruption",
     "Action",
+    "PlanSnapshot",
 ]

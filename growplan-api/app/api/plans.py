@@ -15,6 +15,7 @@ from app.models.disruption import Disruption
 from app.models.farm import Farm
 from app.models.nursery import NurseryBatch
 from app.models.plan import Allocation, GridCell, Plan
+from app.models.snapshot import PlanSnapshot
 from app.schemas.disruption import DisruptionRequest
 from app.schemas.plan import (
     AllocationResponse,
@@ -27,12 +28,56 @@ from app.schemas.plan import (
 )
 from app.services.nursery import build_occupancy
 from app.workers.solver_worker import run_solver
+from app.schemas.analytics import (
+    AnalyticsResponse,
+    CompareResponse,
+    HistoryResponse,
+    SnapshotSummary,
+    TimelineResponse,
+)
+from app.services.analytics import compute_analytics, compute_crop_comparison
 
 router = APIRouter(prefix="/plans", tags=["plans"])
 
 
 def _is_test_mode() -> bool:
     return os.environ.get("GP_TEST_MODE", "").lower() in ("true", "1", "yes")
+
+
+def _create_snapshot(plan: Plan, snapshot_type: str, db: Session) -> None:
+    """Serialize current plan state into a PlanSnapshot."""
+    cells = db.query(GridCell).filter(GridCell.plan_id == plan.id).all()
+    allocations = (
+        db.query(Allocation).filter(Allocation.plan_id == plan.id).all()
+    )
+    snapshot = PlanSnapshot(
+        plan_id=plan.id,
+        snapshot_type=snapshot_type,
+        grid_data=[
+            {
+                "cell_index": c.cell_index,
+                "crop_id": c.crop_id,
+                "status": c.status,
+                "week_started": c.week_started,
+                "week_harvest_expected": c.week_harvest_expected,
+            }
+            for c in cells
+        ],
+        allocations=[
+            {
+                "crop_id": a.crop_id,
+                "grids_allocated": a.grids_allocated,
+                "sustainable_kg_per_week": a.sustainable_kg_per_week,
+                "revenue_per_week": a.revenue_per_week,
+            }
+            for a in allocations
+        ],
+        revenue={
+            "total_per_week": plan.revenue_total or 0,
+            "revenue_gap": plan.revenue_gap or 0,
+        },
+    )
+    db.add(snapshot)
 
 
 @router.post("/generate", response_model=PlanGenerateResponse, status_code=202)
@@ -158,6 +203,7 @@ def confirm_plan(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="Can only confirm completed plans"
         )
+    _create_snapshot(plan, "confirmed", db)
     plan.status = "confirmed"
     db.commit()
     return {"status": "confirmed", "plan_id": plan.id}
@@ -172,6 +218,7 @@ def advance_week(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="Can only advance confirmed plans"
         )
+    _create_snapshot(plan, "week-advanced", db)
     plan.current_week += 1
     db.commit()
     return {"current_week": plan.current_week}
@@ -215,6 +262,7 @@ def replan_endpoint(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="No disruption found for this plan"
         )
+    _create_snapshot(plan, "replanned", db)
     from app.services.replanner import replan as do_replan
 
     result = do_replan(plan_id, disruption, db)
@@ -337,3 +385,177 @@ def get_nursery(plan_id: int, db: Session = Depends(get_db)):
             for b in batches
         ],
     }
+
+
+@router.get("/{plan_id}/analytics", response_model=AnalyticsResponse)
+def get_analytics(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
+    cells = db.query(GridCell).filter(GridCell.plan_id == plan_id).all()
+    allocations = db.query(Allocation).filter(Allocation.plan_id == plan_id).all()
+    from app.models.crop import Crop as CropModel
+    crops = db.query(CropModel).filter(CropModel.id.in_(plan.selected_crops)).all()
+
+    cell_dicts = [
+        {"cell_index": c.cell_index, "crop_id": c.crop_id, "status": c.status,
+         "week_started": c.week_started, "week_harvest_expected": c.week_harvest_expected}
+        for c in cells
+    ]
+    alloc_dicts = [
+        {"crop_id": a.crop_id, "grids_allocated": a.grids_allocated,
+         "sustainable_kg_per_week": a.sustainable_kg_per_week, "revenue_per_week": a.revenue_per_week}
+        for a in allocations
+    ]
+    crop_dicts = [
+        {"id": c.id, "name": c.name, "accent": c.accent, "weeks_on_panel": c.weeks_on_panel,
+         "nursery_lead_weeks": c.nursery_lead_weeks, "yield_per_grid": c.yield_per_grid,
+         "price_per_kg": c.price_per_kg, "seedlings_per_grid": c.seedlings_per_grid,
+         "germination_rate": c.germination_rate, "cost_per_seedling": c.cost_per_seedling,
+         "nutrient_cost_per_grid_week": c.nutrient_cost_per_grid_week}
+        for c in crops
+    ]
+
+    return compute_analytics(
+        cells=cell_dicts, allocations=alloc_dicts, crops=crop_dicts,
+        horizon_weeks=plan.horizon_weeks, current_week=plan.current_week,
+    )
+
+
+@router.get("/{plan_id}/timeline", response_model=TimelineResponse)
+def get_timeline(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    cells = db.query(GridCell).filter(GridCell.plan_id == plan_id).all()
+    from app.models.crop import Crop as CropModel
+    crops = db.query(CropModel).filter(CropModel.id.in_(plan.selected_crops)).all()
+    crop_map = {c.id: c for c in crops}
+
+    from collections import defaultdict
+    crop_intervals: dict[str, list] = defaultdict(list)
+    for c in cells:
+        if c.crop_id and c.week_started is not None and c.week_harvest_expected is not None:
+            crop_intervals[c.crop_id].append({
+                "cellIndex": c.cell_index,
+                "startWeek": c.week_started,
+                "endWeek": c.week_harvest_expected - 1,
+                "phase": "growing",
+            })
+            crop_intervals[c.crop_id].append({
+                "cellIndex": c.cell_index,
+                "startWeek": c.week_harvest_expected - 1,
+                "endWeek": c.week_harvest_expected,
+                "phase": "harvest",
+            })
+
+    timeline_crops = []
+    for cid in plan.selected_crops:
+        crop_obj = crop_map.get(cid)
+        if crop_obj:
+            timeline_crops.append({
+                "cropId": cid,
+                "cropName": crop_obj.name,
+                "color": crop_obj.accent,
+                "intervals": crop_intervals.get(cid, []),
+            })
+
+    return TimelineResponse(
+        crops=timeline_crops,
+        current_week=plan.current_week,
+        horizon_weeks=plan.horizon_weeks,
+    )
+
+
+@router.get("/{plan_id}/history", response_model=HistoryResponse)
+def get_history(
+    plan_id: int,
+    page: int = 1,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    query = db.query(PlanSnapshot).filter(PlanSnapshot.plan_id == plan_id)
+    total = query.count()
+    snapshots = (
+        query.order_by(PlanSnapshot.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+
+    return HistoryResponse(
+        snapshots=[
+            SnapshotSummary(
+                id=s.id,
+                snapshot_type=s.snapshot_type,
+                total_grids=len(s.grid_data),
+                crop_count=len(set(
+                    c["crop_id"] for c in s.grid_data if c.get("crop_id")
+                )),
+                revenue_per_week=s.revenue.get("total_per_week", 0),
+                created_at=s.created_at.isoformat() if s.created_at else "",
+            )
+            for s in snapshots
+        ],
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
+
+@router.get("/{plan_id}/compare", response_model=CompareResponse)
+def get_crop_comparison(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    allocations = db.query(Allocation).filter(Allocation.plan_id == plan_id).all()
+    from app.models.crop import Crop as CropModel
+    crops = db.query(CropModel).filter(CropModel.id.in_(plan.selected_crops)).all()
+
+    alloc_dicts = [
+        {"crop_id": a.crop_id, "grids_allocated": a.grids_allocated,
+         "sustainable_kg_per_week": a.sustainable_kg_per_week, "revenue_per_week": a.revenue_per_week}
+        for a in allocations
+    ]
+    crop_dicts = [
+        {"id": c.id, "name": c.name, "accent": c.accent, "weeks_on_panel": c.weeks_on_panel,
+         "yield_per_grid": c.yield_per_grid, "price_per_kg": c.price_per_kg,
+         "seedlings_per_grid": c.seedlings_per_grid, "germination_rate": c.germination_rate,
+         "cost_per_seedling": c.cost_per_seedling, "nutrient_cost_per_grid_week": c.nutrient_cost_per_grid_week}
+        for c in crops
+    ]
+    return compute_crop_comparison(allocations=alloc_dicts, crops=crop_dicts)
+
+
+@router.get("/{plan_id}/export")
+def export_plan(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    cells = db.query(GridCell).filter(GridCell.plan_id == plan_id).all()
+    from fastapi.responses import Response
+    lines = ["Grid Index,Crop,Status,Week Started,Week Harvest Expected"]
+    for c in sorted(cells, key=lambda x: x.cell_index):
+        lines.append(
+            f"{c.cell_index},{c.crop_id or ''},{c.status},"
+            f"{c.week_started or ''},{c.week_harvest_expected or ''}"
+        )
+    csv_content = "\n".join(lines)
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename=plan-{plan_id}-week-{plan.current_week}.csv"
+            )
+        },
+    )

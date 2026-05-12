@@ -31,6 +31,9 @@ type DashboardPageProps = {
   onBackToConfirm: () => void
   onOpenReplan: () => void
   onOpenWorkSchedule: () => void
+  onViewAnalytics: () => void
+  onViewCropComparison: () => void
+  onViewPlanHistory: () => void
 }
 
 const flowItems = [
@@ -56,6 +59,9 @@ export function DashboardPage({
   onBackToConfirm,
   onOpenReplan,
   onOpenWorkSchedule,
+  onViewAnalytics,
+  onViewCropComparison,
+  onViewPlanHistory,
 }: DashboardPageProps) {
   const sideItems = [
     { label: 'Overview', icon: Grid3X3, active: true, tabClass: 'tab-key-overview' },
@@ -281,6 +287,11 @@ export function DashboardPage({
             </p>
             <strong>{isRiskReady ? 'Click Here to Replan !' : 'Waiting for incident signal'}</strong>
           </button>
+          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+            <button type="button" onClick={onViewAnalytics}>Analytics</button>
+            <button type="button" onClick={onViewCropComparison}>Compare Crops</button>
+            <button type="button" onClick={onViewPlanHistory}>Plan History</button>
+          </div>
         </section>
 
         <section className="dashboard-content">
