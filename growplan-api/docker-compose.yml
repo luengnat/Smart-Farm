@@ -1,0 +1,67 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: growplan
+      POSTGRES_PASSWORD: growplan
+      POSTGRES_DB: growplan
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U growplan"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  fastapi:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      GP_DATABASE_URL: postgresql+psycopg2://growplan:growplan@postgres:5432/growplan
+      GP_REDIS_URL: redis://redis:6379/0
+      GP_API_KEY: ${GP_API_KEY:-dev-key-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  rq-worker:
+    build: .
+    command: rq worker --url redis://redis:6379/0 default
+    environment:
+      GP_DATABASE_URL: postgresql+psycopg2://growplan:growplan@postgres:5432/growplan
+      GP_REDIS_URL: redis://redis:6379/0
+      GP_API_KEY: ${GP_API_KEY:-dev-key-change-in-production}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - fastapi
+
+volumes:
+  pgdata:
