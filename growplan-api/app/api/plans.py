@@ -16,6 +16,7 @@ from app.models.disruption import Disruption
 from app.models.farm import Farm
 from app.models.farm_member import FarmMember
 from app.models.nursery import NurseryBatch
+from app.models.action import Action
 from app.models.plan import Allocation, GridCell, Plan
 from app.models.snapshot import PlanSnapshot
 from app.models.user import User
@@ -95,6 +96,28 @@ def _create_snapshot(plan: Plan, snapshot_type: str, db: Session) -> None:
         },
     )
     db.add(snapshot)
+
+
+def _persist_actions(plan: Plan, db: Session) -> None:
+    """Clear current-week actions and regenerate from plan state."""
+    db.query(Action).filter(
+        Action.plan_id == plan.id, Action.week == plan.current_week
+    ).delete()
+    from app.services.actions import generate_action_queue
+
+    queue = generate_action_queue(plan, plan.current_week, db)
+    for item in queue:
+        db.add(Action(
+            plan_id=plan.id,
+            type=item["type"],
+            priority=item["priority"],
+            week=item["week"],
+            crop_id=item.get("crop_id"),
+            grid_indexes=item.get("grid_indexes"),
+            description=item["description"],
+            revenue_impact=item.get("revenue_impact", 0),
+            batch_id=item.get("batch_id"),
+        ))
 
 
 @router.post("/generate", response_model=PlanGenerateResponse, status_code=202)
@@ -219,6 +242,7 @@ def confirm_plan(plan_id: int, current_user: User = Depends(get_current_user), d
             status_code=400, detail="Can only confirm completed plans"
         )
     _create_snapshot(plan, "confirmed", db)
+    _persist_actions(plan, db)
     plan.status = "confirmed"
     db.commit()
     return {"status": "confirmed", "plan_id": plan.id}
@@ -233,6 +257,7 @@ def advance_week(plan_id: int, current_user: User = Depends(get_current_user), d
         )
     _create_snapshot(plan, "week-advanced", db)
     plan.current_week += 1
+    _persist_actions(plan, db)
     db.commit()
     return {"current_week": plan.current_week}
 
@@ -282,10 +307,46 @@ def replan_endpoint(plan_id: int, current_user: User = Depends(get_current_user)
 @router.get("/{plan_id}/actions")
 def get_actions(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     plan = _verify_plan_access(plan_id, current_user, db)
-    from app.services.actions import generate_action_queue
+    actions = (
+        db.query(Action)
+        .filter(Action.plan_id == plan.id, Action.week == plan.current_week)
+        .order_by(Action.priority, Action.id)
+        .all()
+    )
+    return {
+        "actions": [
+            {
+                "id": a.id,
+                "type": a.type,
+                "priority": a.priority,
+                "week": a.week,
+                "cropId": a.crop_id,
+                "gridIndexes": a.grid_indexes,
+                "description": a.description,
+                "revenueImpact": a.revenue_impact,
+                "batchId": a.batch_id,
+                "completed": a.completed,
+            }
+            for a in actions
+        ],
+        "currentWeek": plan.current_week,
+    }
 
-    actions = generate_action_queue(plan, plan.current_week, db)
-    return {"actions": actions}
+
+@router.patch("/{plan_id}/actions/{action_id}")
+def toggle_action(
+    plan_id: int,
+    action_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _verify_plan_access(plan_id, current_user, db)
+    action = db.query(Action).filter(Action.id == action_id, Action.plan_id == plan_id).first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    action.completed = not action.completed
+    db.commit()
+    return {"id": action.id, "completed": action.completed}
 
 
 @router.get("/{plan_id}/costs")
