@@ -15,6 +15,7 @@ from app.models.disruption import Disruption
 from app.models.farm import Farm
 from app.models.nursery import NurseryBatch
 from app.models.plan import Allocation, GridCell, Plan
+from app.models.snapshot import PlanSnapshot
 from app.schemas.disruption import DisruptionRequest
 from app.schemas.plan import (
     AllocationResponse,
@@ -33,6 +34,42 @@ router = APIRouter(prefix="/plans", tags=["plans"])
 
 def _is_test_mode() -> bool:
     return os.environ.get("GP_TEST_MODE", "").lower() in ("true", "1", "yes")
+
+
+def _create_snapshot(plan: Plan, snapshot_type: str, db: Session) -> None:
+    """Serialize current plan state into a PlanSnapshot."""
+    cells = db.query(GridCell).filter(GridCell.plan_id == plan.id).all()
+    allocations = (
+        db.query(Allocation).filter(Allocation.plan_id == plan.id).all()
+    )
+    snapshot = PlanSnapshot(
+        plan_id=plan.id,
+        snapshot_type=snapshot_type,
+        grid_data=[
+            {
+                "cell_index": c.cell_index,
+                "crop_id": c.crop_id,
+                "status": c.status,
+                "week_started": c.week_started,
+                "week_harvest_expected": c.week_harvest_expected,
+            }
+            for c in cells
+        ],
+        allocations=[
+            {
+                "crop_id": a.crop_id,
+                "grids_allocated": a.grids_allocated,
+                "sustainable_kg_per_week": a.sustainable_kg_per_week,
+                "revenue_per_week": a.revenue_per_week,
+            }
+            for a in allocations
+        ],
+        revenue={
+            "total_per_week": plan.revenue_total or 0,
+            "revenue_gap": plan.revenue_gap or 0,
+        },
+    )
+    db.add(snapshot)
 
 
 @router.post("/generate", response_model=PlanGenerateResponse, status_code=202)
@@ -158,6 +195,7 @@ def confirm_plan(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="Can only confirm completed plans"
         )
+    _create_snapshot(plan, "confirmed", db)
     plan.status = "confirmed"
     db.commit()
     return {"status": "confirmed", "plan_id": plan.id}
@@ -172,6 +210,7 @@ def advance_week(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="Can only advance confirmed plans"
         )
+    _create_snapshot(plan, "week-advanced", db)
     plan.current_week += 1
     db.commit()
     return {"current_week": plan.current_week}
@@ -215,6 +254,7 @@ def replan_endpoint(plan_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=400, detail="No disruption found for this plan"
         )
+    _create_snapshot(plan, "replanned", db)
     from app.services.replanner import replan as do_replan
 
     result = do_replan(plan_id, disruption, db)
