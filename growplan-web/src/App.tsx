@@ -186,10 +186,6 @@ function App() {
         generatedPlan={generatedPlan}
         onBackToConfirm={() => setPage('confirm-plan')}
         onOpenReplan={() => setPage('replan')}
-        onOpenWorkSchedule={() => setPage('work-schedule-employer')}
-        onViewAnalytics={() => setPage('analytics')}
-        onViewCropComparison={() => setPage('crop-comparison')}
-        onViewPlanHistory={() => setPage('plan-history')}
       />
     )
   }

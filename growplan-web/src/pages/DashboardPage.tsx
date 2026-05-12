@@ -1,27 +1,9 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
-import {
-  AlertTriangle,
-  Bell,
-  BellRing,
-  Bot,
-  CalendarDays,
-  Check,
-  Droplets,
-  Grid3X3,
-  Leaf,
-  MessageSquare,
-  LoaderCircle,
-  Send,
-  ShieldCheck,
-  Sparkles,
-  Sprout,
-  Thermometer,
-  Waves,
-} from 'lucide-react'
-import { AppHeader } from '../components/AppHeader'
+import { useMemo } from 'react'
+import { Grid3X3, Leaf, Sprout, Droplets, Waves, Thermometer, Clock } from 'lucide-react'
 import { cropLibrary, type CropId } from '../constants/crops'
 import { generatePlanData } from '../lib/planGenerator'
 import type { GeneratedPlanData, GoalData, SetupFarmData } from '../types/planning'
+import { Metric } from '../components/Metric'
 
 type DashboardPageProps = {
   farm: SetupFarmData
@@ -30,25 +12,24 @@ type DashboardPageProps = {
   generatedPlan: GeneratedPlanData | null
   onBackToConfirm: () => void
   onOpenReplan: () => void
-  onOpenWorkSchedule: () => void
-  onViewAnalytics: () => void
-  onViewCropComparison: () => void
-  onViewPlanHistory: () => void
 }
 
-const flowItems = [
-  'Setup Farm',
-  'Define Goal',
-  'Generate Plan',
-  'Execute',
-  'Monitor',
-  'Re-plan',
-  'Harvest',
-]
+const SURFACE: React.CSSProperties = {
+  background: 'var(--color-bg-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+}
 
-type ChatMessage = {
-  role: 'user' | 'bot'
-  text: string
+const LABEL: React.CSSProperties = {
+  fontSize: 'var(--text-xs)',
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase' as const,
+  color: 'var(--color-text-muted)',
+}
+
+const MONO: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
 }
 
 export function DashboardPage({
@@ -58,21 +39,7 @@ export function DashboardPage({
   generatedPlan,
   onBackToConfirm,
   onOpenReplan,
-  onOpenWorkSchedule,
-  onViewAnalytics,
-  onViewCropComparison,
-  onViewPlanHistory,
 }: DashboardPageProps) {
-  const sideItems = [
-    { label: 'Overview', icon: Grid3X3, active: true, tabClass: 'tab-key-overview' },
-    { label: 'Farm Grid', icon: Sprout },
-    { label: 'Plan', icon: CalendarDays },
-    { label: 'Work Schedule', icon: Sparkles, onClick: onOpenWorkSchedule, tabClass: 'tab-key-work-schedule' },
-    { label: 'Crops', icon: Leaf },
-    { label: 'Sensors', icon: Waves },
-    { label: 'Alerts', icon: Bell },
-  ]
-
   const selectedCrops = useMemo(
     () => cropLibrary.filter((crop) => selectedCropIds.includes(crop.id)),
     [selectedCropIds],
@@ -89,54 +56,23 @@ export function DashboardPage({
     [farm, generatedPlan, goalData, selectedCropIds],
   )
 
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
-    {
-      role: 'bot',
-      text: 'Hello! I am your AgriMatrix Copilot. How can I help with your plan today?',
-    },
-  ])
-  const [isCopilotThinking, setIsCopilotThinking] = useState(false)
-  const [isRiskReady, setIsRiskReady] = useState(false)
-  const thinkingTimerRef = useRef<number | null>(null)
-  const riskTimerRef = useRef<number | null>(null)
+  // --- Revenue computation ---
+  const pricePerKgByCrop: Record<CropId, number> = {
+    lettuce: 2.2,
+    basil: 3.8,
+    kale: 2.7,
+    mint: 3.2,
+  }
 
-  const chatEndRef = useRef<HTMLDivElement>(null)
+  const totalRevenue = useMemo(() => {
+    return resolvedPlan.cropSummaries.reduce((sum, cs) => {
+      return sum + cs.targetPerWeek * pricePerKgByCrop[cs.cropId]
+    }, 0)
+  }, [resolvedPlan.cropSummaries])
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatHistory, isCopilotThinking])
+  const revenuePerWeek = totalRevenue
 
-  useEffect(() => {
-    return () => {
-      if (thinkingTimerRef.current !== null) {
-        window.clearTimeout(thinkingTimerRef.current)
-      }
-      if (riskTimerRef.current !== null) {
-        window.clearTimeout(riskTimerRef.current)
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    setIsRiskReady(false)
-    riskTimerRef.current = window.setTimeout(() => {
-      setIsRiskReady(true)
-      riskTimerRef.current = null
-    }, 5000)
-  }, [farm.farmName, goalData, selectedCropIds])
-
-  const accountInitials =
-    farm.farmName
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? '')
-      .join('')
-      .slice(0, 2) || 'GF'
-
-  const primaryCrop = selectedCrops[0]
-  const primaryGoal = primaryCrop ? goalData.cropGoals[primaryCrop.id]?.targetPerWeek ?? 0 : 0
-
+  // --- Grid cells ---
   const gridCells = useMemo(() => {
     return resolvedPlan.cells.map((cell) => {
       const crop = cropLibrary.find((item) => item.id === cell.cropId)
@@ -149,6 +85,7 @@ export function DashboardPage({
     })
   }, [resolvedPlan.cells])
 
+  // --- Crop mix ---
   const cropMix = useMemo(() => {
     const total = gridCells.length
     return selectedCrops.map((crop) => {
@@ -158,11 +95,12 @@ export function DashboardPage({
         name: crop.name,
         color: crop.accent,
         count,
-        percent: Math.round((count / total) * 100),
+        percent: total > 0 ? Math.round((count / total) * 100) : 0,
       }
     })
   }, [gridCells, selectedCrops])
 
+  // --- Nursery ---
   const nextSeedWeek = resolvedPlan.nurseryLoad[0]?.week ?? 1
   const nextSeedBatch = useMemo(() => {
     return resolvedPlan.nurserySchedule
@@ -188,358 +126,295 @@ export function DashboardPage({
       },
     )
   }, [farm.nurseryCapacity, resolvedPlan.nurseryLoad])
-  const nurseryLoadWeeks = useMemo(() => resolvedPlan.nurseryLoad.slice(0, 8), [resolvedPlan.nurseryLoad])
 
-  const primaryCropName = primaryCrop?.name ?? 'Crop'
-  const secondaryCrop = selectedCrops[1] || selectedCrops[0]
-  const secondaryCropName = secondaryCrop?.name ?? 'Crop'
-
-  const handleAsk = (question: string) => {
-    if (isCopilotThinking) return
-
-    let response = "I'm analyzing the data..."
-
-    if (question.includes(secondaryCropName) && (question.includes('edge') || question.includes('placed'))) {
-      if (secondaryCrop?.id === 'mint') {
-        response = 'Mint is placed at the edge because it has a spreading growth habit. Keeping it isolated prevents it from competing with more compact crops.'
-      } else {
-        response = `${secondaryCropName} is positioned to optimize light and water zone compatibility while maintaining 100% space utilization across your grid.`
-      }
-    } else if (question.includes('100%')) {
-      response = `The plan targets 100% utilization to maximize your space. Every available grid in your ${farm.rows}x${farm.columns} setup is assigned a crop based on your goal.`
-    } else if (question.toLowerCase().includes('risk') || question.toLowerCase().includes('disease')) {
-      response = `The primary risks are: 1) Suspected leaf disease in ${primaryCropName} Zone B affecting 8 trays, and 2) Nursery load reaching ${peakNurseryLoad.activeSeedlings} seedlings (${peakNurseryLoad.utilizationPercent}%) in Week ${peakNurseryLoad.week}. Recommended action is isolate Zone B and re-sequence transplant tasks.`
-    } else if (question.includes('seed next week')) {
-      response = `In Week ${nextSeedWeek}, you should seed ${nextSeedBatch} seedlings. This ensures they are ready for transplanting after the ${farm.seedlingLeadDays}-day lead time.`
-    }
-
-    setChatHistory((prev) => [
-      ...prev,
-      { role: 'user', text: question },
-    ])
-    setIsCopilotThinking(true)
-
-    thinkingTimerRef.current = window.setTimeout(() => {
-      setChatHistory((prev) => [...prev, { role: 'bot', text: response }])
-      setIsCopilotThinking(false)
-      thinkingTimerRef.current = null
-    }, 950)
-  }
+  const nurseryLoadWeeks = useMemo(
+    () => resolvedPlan.nurseryLoad.slice(0, 8),
+    [resolvedPlan.nurseryLoad],
+  )
 
   return (
-    <main className="dashboard-shell">
-      <aside className="dashboard-side">
-        <nav className="dashboard-nav">
-          {sideItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <button
-                key={item.label}
-                type="button"
-                className={`${item.active ? 'active' : ''} ${item.tabClass ?? ''}`.trim()}
-                onClick={item.onClick}
-              >
-                <Icon size={18} />
-                <span>{item.label}</span>
-              </button>
-            )
-          })}
-        </nav>
-      </aside>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* ── Top row: 4 metric cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+        <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
+          <Metric
+            value={`$${totalRevenue.toFixed(0)}`}
+            label="Total Revenue /wk"
+          />
+        </div>
+        <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
+          <Metric
+            value={`$${revenuePerWeek.toFixed(0)}`}
+            label="Revenue /week"
+          />
+        </div>
+        <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
+          <Metric
+            value={`${resolvedPlan.utilizationPercent}%`}
+            label="Grid Utilization"
+          />
+        </div>
+        <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
+          <Metric
+            value="Active"
+            label="Plan Status"
+            positive
+          />
+        </div>
+      </div>
 
-      <section className="dashboard-main">
-        <AppHeader accountName={farm.farmName} accountInitials={accountInitials} variant="edge" />
-
-        <section className="dashboard-kpis">
-          <article>
-            <p>Utilization</p>
-            <strong>{resolvedPlan.utilizationPercent}%</strong>
-          </article>
-          <article>
-            <p>Expected revenue</p>
-            <strong>${(resolvedPlan.expectedRevenue / 1000).toFixed(1)}k</strong>
-          </article>
-          <article>
-            <p>Stockout risk</p>
-            <strong>{resolvedPlan.stockoutRisk}</strong>
-          </article>
-          <article>
-            <p>Nursery risk</p>
-            <strong>{resolvedPlan.seedlingCapacityRisk}</strong>
-          </article>
-          <article className="goal-kpi">
-            <p>
-              Goal: {primaryGoal} kg {primaryCrop?.name.toLowerCase() ?? 'crop'} / week
-            </p>
-            <span>{Math.max(78, Math.min(97, resolvedPlan.utilizationPercent - 3))}% target progress</span>
-          </article>
-          <button
-            type="button"
-            className={`risk-kpi replan-trigger ${isRiskReady ? 'ready' : 'waiting'}`}
-            onClick={onOpenReplan}
-            disabled={!isRiskReady}
+      {/* ── Middle row: Farm Grid | Crop Mix + Nursery ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+        {/* Farm Grid */}
+        <div style={{ ...SURFACE, padding: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <h2 style={{ ...LABEL, margin: 0, color: 'var(--color-text-primary)' }}>Farm Grid</h2>
+            <span style={{ ...MONO, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+              {resolvedPlan.rows} x {resolvedPlan.columns}
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${resolvedPlan.columns}, 26px)`,
+              gap: '2px',
+              justifyContent: 'center',
+            }}
           >
-            <p>
-              {isRiskReady ? <BellRing size={14} className="risk-alarm-icon" /> : <LoaderCircle size={14} className="spin" />}
-              {isRiskReady
-                ? `Risk: suspected disease in ${primaryCropName.toLowerCase()} Zone B`
-                : 'Monitoring crop health signals...'}
-            </p>
-            <strong>{isRiskReady ? 'Click Here to Replan !' : 'Waiting for incident signal'}</strong>
-          </button>
-          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
-            <button type="button" onClick={onViewAnalytics}>Analytics</button>
-            <button type="button" onClick={onViewCropComparison}>Compare Crops</button>
-            <button type="button" onClick={onViewPlanHistory}>Plan History</button>
+            {gridCells.map((cell, idx) => (
+              <span
+                key={idx}
+                title={cell.name}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 3,
+                  backgroundColor: cell.color,
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              />
+            ))}
           </div>
-        </section>
+        </div>
 
-        <section className="dashboard-content">
-          <div className="dashboard-left-stack">
-            <section className="dashboard-grid-card">
-              <header>
-                <h2>Farm Grid</h2>
-              </header>
-              <div className="dashboard-grid-layout">
-                <div className="dashboard-grid-wrapper">
-                  <div className="dashboard-grid-size">
-                    Layout: {resolvedPlan.rows}x{resolvedPlan.columns}
-                  </div>
+        {/* Crop Mix + Nursery Queue */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/* Crop Mix */}
+          <div style={{ ...SURFACE, padding: '1.25rem' }}>
+            <h2 style={{ ...LABEL, margin: '0 0 0.75rem', color: 'var(--color-text-primary)' }}>Crop Mix</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {cropMix.map((item) => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      backgroundColor: item.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)', width: 64, flexShrink: 0 }}>
+                    {item.name}
+                  </span>
                   <div
-                    className="dashboard-grid"
-                    style={{ gridTemplateColumns: `repeat(${resolvedPlan.columns}, 30px)` }}
+                    style={{
+                      flex: 1,
+                      height: 6,
+                      borderRadius: 3,
+                      background: 'var(--color-bg-base)',
+                      overflow: 'hidden',
+                    }}
                   >
-                    {gridCells.map((cell, idx) => (
-                      <span
-                        key={idx}
-                        style={{ backgroundColor: cell.color }}
-                        title={cell.name}
-                      ></span>
-                    ))}
+                    <div
+                      style={{
+                        width: `${item.percent}%`,
+                        height: '100%',
+                        borderRadius: 3,
+                        backgroundColor: item.color,
+                      }}
+                    />
                   </div>
-                </div>
-
-                <aside className="dashboard-grid-insights">
-                  <section className="crop-mix-card">
-                    <h3>Crop Mix</h3>
-                    {cropMix.map((item) => (
-                      <article key={item.id}>
-                        <div>
-                          <b style={{ backgroundColor: item.color }}></b>
-                          <span>{item.name}</span>
-                        </div>
-                        <p>{item.percent}%</p>
-                        <small>({item.count}/{gridCells.length})</small>
-                      </article>
-                    ))}
-                  </section>
-
-                  <section className="crop-mix-card nursery-insight-card">
-                    <h3>Nursery Queue</h3>
-                    <article>
-                      <div>
-                        <span>Next seeding batch</span>
-                      </div>
-                      <p>W{nextSeedWeek}</p>
-                      <small>{nextSeedBatch} seedlings</small>
-                    </article>
-                    <article>
-                      <div>
-                        <span>Ready to transplant</span>
-                      </div>
-                      <p>{readyToTransplant}</p>
-                      <small>this week</small>
-                    </article>
-                    <article>
-                      <div>
-                        <span>Peak nursery load</span>
-                      </div>
-                      <p>{peakNurseryLoad.activeSeedlings}</p>
-                      <small>W{peakNurseryLoad.week}</small>
-                    </article>
-                  </section>
-
-                  <section className="sensor-mini-card">
-                    <h3>Live Sensors (Zone Avg)</h3>
-                    <article>
-                      <span>
-                        <Droplets size={13} />
-                        pH
-                      </span>
-                      <strong>6.1</strong>
-                      <small>Optimal</small>
-                    </article>
-                    <article>
-                      <span>
-                        <Waves size={13} />
-                        EC
-                      </span>
-                      <strong>1.8 mS/cm</strong>
-                      <small>Optimal</small>
-                    </article>
-                    <article>
-                      <span>
-                        <Thermometer size={13} />
-                        Temperature
-                      </span>
-                      <strong>21.4 c</strong>
-                      <small>Optimal</small>
-                    </article>
-                  </section>
-                </aside>
-              </div>
-            </section>
-
-            <section className="dashboard-plan-card">
-              <header>
-                <h2>8-Week Plan</h2>
-              </header>
-              <div className="plan-mini-table">
-                {resolvedPlan.timelineRows.map((row) => (
-                  <article key={row.cropId} className="plan-mini-row">
-                    <strong>{row.label}</strong>
-                    <div className="plan-mini-track">
-                      <i
-                        style={{
-                          gridColumn: `${row.seedWeek} / span 1`,
-                          backgroundColor: '#dce9ff',
-                        }}
-                      >
-                        Seed
-                      </i>
-                      <i
-                        style={{
-                          backgroundColor: row.color,
-                          gridColumn: `${row.transplantWeek} / span ${row.growWeeks}`,
-                        }}
-                      >
-                        Grow
-                      </i>
-                      <i
-                        style={{
-                          gridColumn: `${row.harvestWeek} / span 1`,
-                          backgroundColor: '#c7e7d0',
-                        }}
-                      >
-                        Harvest
-                      </i>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <div className="confirm-timeline-table nursery-load-table">
-                <div className="timeline-head nursery-load-head">
-                  <span>Nursery Load</span>
-                  {nurseryLoadWeeks.map((item) => (
-                    <b key={item.week}>W{item.week}</b>
-                  ))}
-                </div>
-                <div className="timeline-row-confirm nursery-load-row-confirm">
-                  <span>Seedlings</span>
-                  <div className="timeline-track-confirm nursery-track-confirm">
-                    {nurseryLoadWeeks.map((item) => (
-                      <i
-                        key={item.week}
-                        className={`risk-${item.risk.toLowerCase()}`}
-                        style={{ gridColumn: `${item.week} / span 1` }}
-                      >
-                        {item.activeSeedlings}
-                      </i>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <aside className="dashboard-copilot">
-            <header>
-              <h2>
-                <Bot size={18} />
-                AI Copilot
-              </h2>
-            </header>
-
-            <section className="copilot-goal-pill">
-              <p>
-                Goal: {primaryGoal} kg {primaryCrop?.name.toLowerCase() ?? 'crop'} / week
-              </p>
-              <span>
-                Nursery peak {peakNurseryLoad.activeSeedlings}/{farm.nurseryCapacity} seedlings
-              </span>
-            </section>
-
-            <div className="copilot-chat-history">
-              {chatHistory.map((msg, idx) => (
-                <div key={idx} className={`chat-bubble ${msg.role}`}>
-                  {msg.text}
+                  <span style={{ ...MONO, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', width: 36, textAlign: 'right' }}>
+                    {item.percent}%
+                  </span>
+                  <span style={{ ...MONO, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', width: 28, textAlign: 'right' }}>
+                    {item.count}
+                  </span>
                 </div>
               ))}
-              {isCopilotThinking ? (
-                <div className="chat-bubble bot thinking">
-                  <LoaderCircle size={14} className="spin" />
-                  AgriMatrix is thinking...
-                </div>
-              ) : null}
-              <div ref={chatEndRef} />
             </div>
+          </div>
 
-            <div className="copilot-actions">
-              <button
-                type="button"
-                disabled={isCopilotThinking}
-                onClick={() => handleAsk(`Why is ${secondaryCropName} placed here?`)}
-              >
-                Why is {secondaryCropName} placed here?
-              </button>
-              <button type="button" disabled={isCopilotThinking} onClick={() => handleAsk('What are the current disease risks?')}>
-                Explain risk
-              </button>
-              <button
-                type="button"
-                disabled={isCopilotThinking}
-                onClick={() => handleAsk('Why is this plan 100% utilized?')}
-              >
-                Why 100% utilized?
-              </button>
-              <button type="button" disabled={isCopilotThinking} onClick={() => handleAsk('What should I seed next week?')}>
-                What to seed?
-              </button>
+          {/* Nursery Queue */}
+          <div style={{ ...SURFACE, padding: '1.25rem' }}>
+            <h2 style={{ ...LABEL, margin: '0 0 0.75rem', color: 'var(--color-text-primary)' }}>Nursery Queue</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>Next seeding batch</span>
+                <span style={{ ...MONO, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                  W{nextSeedWeek} &middot; {nextSeedBatch} seedlings
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>Ready to transplant</span>
+                <span style={{ ...MONO, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                  {readyToTransplant}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>Peak nursery load</span>
+                <span style={{ ...MONO, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
+                  {peakNurseryLoad.activeSeedlings} &middot; W{peakNurseryLoad.week}
+                </span>
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="copilot-input-visual">
-              <p>{isCopilotThinking ? 'AI is drafting a response...' : 'Select a prompt above to interact'}</p>
-              <Send size={16} />
-            </div>
+      {/* ── Bottom: 8-Week Plan Timeline ── */}
+      <div style={{ ...SURFACE, padding: '1.25rem' }}>
+        <h2 style={{ ...LABEL, margin: '0 0 0.75rem', color: 'var(--color-text-primary)' }}>8-Week Plan</h2>
 
-            <button type="button" className="back-confirm-btn" onClick={onBackToConfirm}>
-              <MessageSquare size={16} />
-              Back to Confirm Plan
-            </button>
-          </aside>
-        </section>
+        {/* Week header */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `80px repeat(8, 1fr)`,
+            gap: '2px',
+            marginBottom: '4px',
+          }}
+        >
+          <span />
+          {Array.from({ length: 8 }, (_, i) => (
+            <span
+              key={i}
+              style={{
+                ...MONO,
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-text-muted)',
+                textAlign: 'center',
+              }}
+            >
+              W{i + 1}
+            </span>
+          ))}
+        </div>
 
-        <section className="dashboard-flow-strip">
-          {flowItems.map((item, idx) => {
-            const done = idx <= 3
-            const active = idx === 4
+        {/* Timeline rows */}
+        {resolvedPlan.timelineRows.map((row) => (
+          <div
+            key={row.cropId}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `80px repeat(8, 1fr)`,
+              gap: '2px',
+              marginBottom: '2px',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-text-primary)',
+                display: 'flex',
+                alignItems: 'center',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {row.label}
+            </span>
+            {Array.from({ length: 8 }, (_, weekIdx) => {
+              const week = weekIdx + 1
+              let bg = 'transparent'
+              let label = ''
+              if (week === row.seedWeek) {
+                bg = 'rgba(220, 233, 255, 0.2)'
+                label = 'S'
+              } else if (week >= row.transplantWeek && week < row.transplantWeek + row.growWeeks) {
+                bg = row.color
+                label = 'G'
+              } else if (week === row.harvestWeek) {
+                bg = 'rgba(199, 231, 208, 0.25)'
+                label = 'H'
+              }
+
+              return (
+                <span
+                  key={week}
+                  style={{
+                    height: 28,
+                    borderRadius: 3,
+                    backgroundColor: bg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    ...MONO,
+                    fontSize: 'var(--text-xs)',
+                    color: label ? 'var(--color-text-primary)' : 'transparent',
+                  }}
+                >
+                  {label}
+                </span>
+              )
+            })}
+          </div>
+        ))}
+
+        {/* Nursery load row */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `80px repeat(8, 1fr)`,
+            gap: '2px',
+            marginTop: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid var(--color-border)',
+          }}
+        >
+          <span style={{ ...LABEL, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center' }}>
+            Nursery
+          </span>
+          {nurseryLoadWeeks.map((item) => {
+            const loadColor =
+              item.risk === 'High'
+                ? 'rgba(239, 68, 68, 0.25)'
+                : item.risk === 'Medium'
+                  ? 'rgba(234, 179, 8, 0.2)'
+                  : 'rgba(34, 197, 94, 0.15)'
             return (
-              <article key={item} className={active ? 'active' : ''}>
-                <span>{done ? <Check size={14} /> : idx + 1}</span>
-                <p>{item}</p>
-              </article>
+              <span
+                key={item.week}
+                style={{
+                  height: 28,
+                  borderRadius: 3,
+                  backgroundColor: loadColor,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  ...MONO,
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                {item.activeSeedlings}
+              </span>
             )
           })}
-          <div className="flow-risk-badge">
-            <AlertTriangle size={14} />
-            <span>Delay watch</span>
-          </div>
-          <div className="flow-status-pill">
-            <ShieldCheck size={14} />
-            <span>Plan locked</span>
-          </div>
-        </section>
-      </section>
-    </main>
+        </div>
+      </div>
+
+      {/* ── Bottom bar: actions ── */}
+      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+        <button type="button" className="btn btn-ghost" onClick={onBackToConfirm}>
+          Back to Confirm
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onOpenReplan}>
+          Replan
+        </button>
+      </div>
+    </div>
   )
 }
