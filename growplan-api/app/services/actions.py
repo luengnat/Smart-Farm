@@ -21,7 +21,7 @@ def generate_action_queue(
 ) -> list[dict[str, Any]]:
     """Generate action items for the current week based on plan state."""
     actions: list[dict[str, Any]] = []
-    cells = plan.cells if hasattr(plan, "cells") else []
+    cells = plan.cells if hasattr(plan, "cells") and plan.cells is not None else []
 
     crops_by_id: dict[str, Crop] = {}
     if db:
