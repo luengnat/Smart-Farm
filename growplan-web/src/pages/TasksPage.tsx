@@ -243,6 +243,7 @@ export function TasksPage({ planId, onBack }: Props) {
             style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
             disabled={advancing}
             onClick={() => {
+              if (!window.confirm('Advance to the next week? This action cannot be undone.')) return
               setAdvancing(true)
               advanceMutation.mutate()
             }}

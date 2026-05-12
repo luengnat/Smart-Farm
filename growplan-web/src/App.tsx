@@ -16,7 +16,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { CropComparisonPage } from './pages/CropComparisonPage'
 import { PlanHistoryPage } from './pages/PlanHistoryPage'
 import { TasksPage } from './pages/TasksPage'
-import { apiFetch } from './lib/api'
+import { apiFetch, confirmPlan } from './lib/api'
 import type { CropGoalsById, GeneratedPlanData, GoalData, SetupFarmData } from './types/planning'
 
 type Page =
@@ -144,7 +144,12 @@ function AppContent() {
       try {
         const plan = await apiFetch<GeneratedPlanData>(`/plans/${planId}`)
         if (!cancelled) setGeneratedPlan(plan)
-      } catch { /* plan may not exist yet */ }
+      } catch {
+        if (!cancelled) {
+          setPlanId(null)
+          saveToStorage('gp_planId', null)
+        }
+      }
     })()
     return () => { cancelled = true }
   }, [user, planId])
@@ -157,19 +162,15 @@ function AppContent() {
       try {
         const farm = await apiFetch<Record<string, unknown>>(`/farms/${farmId}`)
         if (!cancelled) {
-          setSetupFarmData({
+          setSetupFarmData((prev) => ({
+            ...prev,
             farmName: farm.name as string,
             farmLocation: (farm.location as string) || '',
             rows: farm.rows as number,
             columns: farm.columns as number,
             growingSystem: (farm.growingSystem as string) || 'hydroponic',
             nurseryCapacity: ((farm.nurseryTrayCount as number) || 1) * ((farm.nurseryTrayCells as number) || 200),
-            seedlingLeadDays: 14,
-            lightingZones: 3,
-            irrigationZones: 2,
-            lightingAssignments: [],
-            irrigationAssignments: [],
-          })
+          }))
         }
       } catch { /* farm may not exist yet */ }
     })()
@@ -300,6 +301,7 @@ function AppContent() {
         <Toaster position="top-right" />
         <GeneratePlanPage
           farm={setupFarmData}
+          farmId={farmId}
           selectedCropIds={selectedCropIds}
           goalData={goalData}
           generatedPlan={generatedPlan}
@@ -332,7 +334,12 @@ function AppContent() {
           goalData={goalData}
           generatedPlan={generatedPlan}
           onBackToGenerate={() => setPage('generate-plan')}
-          onConfirm={() => setPage('dashboard')}
+          onConfirm={async () => {
+            if (planId) {
+              try { await confirmPlan(planId) } catch { /* plan already confirmed */ }
+            }
+            setPage('dashboard')
+          }}
         />
       </>
     )
@@ -351,6 +358,7 @@ function AppContent() {
           generatedPlan={generatedPlan}
           onBackToConfirm={() => setPage('confirm-plan')}
           onOpenReplan={() => setPage('replan')}
+          onSetupFarm={() => setPage('setup-farm')}
         />
       )
     } else if (page === 'analytics') {

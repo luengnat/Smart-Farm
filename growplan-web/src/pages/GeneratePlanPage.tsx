@@ -6,6 +6,7 @@ import type { GeneratedPlanData, GoalData, SetupFarmData } from '../types/planni
 
 type GeneratePlanPageProps = {
   farm: SetupFarmData
+  farmId: number | null
   selectedCropIds: CropId[]
   goalData: GoalData
   generatedPlan: GeneratedPlanData | null
@@ -20,6 +21,7 @@ type GenStatus = 'saving-farm' | 'generating' | 'done' | 'error'
 
 export function GeneratePlanPage({
   farm,
+  farmId,
   selectedCropIds,
   goalData,
   generatedPlan,
@@ -39,12 +41,7 @@ export function GeneratePlanPage({
 
     async function run() {
       try {
-        let currentFarmId: number | null = null
-
-        const storedFarmId = localStorage.getItem('gp_farmId')
-        if (storedFarmId) {
-          currentFarmId = JSON.parse(storedFarmId)
-        }
+        let currentFarmId: number | null = farmId ?? null
 
         if (!currentFarmId) {
           setStatus('saving-farm')
@@ -77,7 +74,7 @@ export function GeneratePlanPage({
 
     run()
     return () => { cancelled = true }
-  }, [farm, selectedCropIds, goalData, generatedPlan, onFarmCreated, onGeneratePlan, onPlanCreated])
+  }, [farm, farmId, selectedCropIds, goalData, generatedPlan, onFarmCreated, onGeneratePlan, onPlanCreated])
 
   const selectedCrops = cropLibrary.filter((crop) => selectedCropIds.includes(crop.id))
 
