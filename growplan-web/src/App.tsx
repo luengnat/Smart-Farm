@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
-import './App.css'
 import { cropLibrary, type CropId } from './constants/crops'
 import { generatePlanData } from './lib/planGenerator'
 import { AppShell } from './components/AppShell'
