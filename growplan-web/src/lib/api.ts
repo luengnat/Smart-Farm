@@ -1,5 +1,16 @@
 import { generatePlanData } from './planGenerator'
-import type { CropId, CropCommitment, GeneratedPlanData, GoalData, SetupFarmData } from '../types/planning'
+import type {
+  AnalyticsData,
+  CropComparisonData,
+  CropId,
+  CropCommitment,
+  GeneratedPlanData,
+  GoalData,
+  HistoryData,
+  PlanSummary,
+  SetupFarmData,
+  TimelineData,
+} from '../types/planning'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const API_KEY = import.meta.env.VITE_API_KEY || 'dev-key-change-in-production'
@@ -142,4 +153,70 @@ export async function checkBackendHealth(): Promise<boolean> {
     backendAvailable = false
     return false
   }
+}
+
+export async function fetchFarm(id: number): Promise<SetupFarmData> {
+  const data = await apiFetch<Record<string, unknown>>(`/farms/${id}`)
+  return {
+    farmName: data.name as string,
+    farmLocation: (data.location as string) || '',
+    rows: data.rows as number,
+    columns: data.columns as number,
+    growingSystem: (data.growingSystem as string) || 'hydroponic',
+    nurseryTrayCount: data.nurseryTrayCount as number,
+    nurseryTrayCells: data.nurseryTrayCells as number,
+    nurseryBufferPercent: data.nurseryBufferPercent as number,
+  }
+}
+
+export async function saveFarm(data: SetupFarmData): Promise<{ id: number }> {
+  return apiFetch<{ id: number }>('/farms', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: data.farmName,
+      location: data.farmLocation,
+      rows: data.rows,
+      columns: data.columns,
+      growingSystem: data.growingSystem,
+      nurseryTrayCount: data.nurseryTrayCount,
+      nurseryTrayCells: data.nurseryTrayCells,
+      nurseryBufferPercent: data.nurseryBufferPercent,
+    }),
+  })
+}
+
+export async function updateFarm(id: number, data: Partial<SetupFarmData>): Promise<SetupFarmData> {
+  const result = await apiFetch<Record<string, unknown>>(`/farms/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+  return result as unknown as SetupFarmData
+}
+
+export async function fetchAnalytics(planId: number): Promise<AnalyticsData> {
+  return apiFetch<AnalyticsData>(`/plans/${planId}/analytics`)
+}
+
+export async function fetchTimeline(planId: number): Promise<TimelineData> {
+  return apiFetch<TimelineData>(`/plans/${planId}/timeline`)
+}
+
+export async function fetchHistory(planId: number, page = 1): Promise<HistoryData> {
+  return apiFetch<HistoryData>(`/plans/${planId}/history?page=${page}`)
+}
+
+export async function fetchCropComparison(planId: number): Promise<CropComparisonData> {
+  return apiFetch<CropComparisonData>(`/plans/${planId}/compare`)
+}
+
+export async function exportPlan(planId: number): Promise<Blob> {
+  const resp = await fetch(`${API_BASE}/plans/${planId}/export`, {
+    headers: { 'X-API-Key': API_KEY },
+  })
+  if (!resp.ok) throw new Error(`Export failed: ${resp.status}`)
+  return resp.blob()
+}
+
+export async function fetchFarmPlans(farmId: number): Promise<{ plans: PlanSummary[] }> {
+  return apiFetch<{ plans: PlanSummary[] }>(`/farms/${farmId}/plans`)
 }
