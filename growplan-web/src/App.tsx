@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Toaster } from 'react-hot-toast'
 import './App.css'
 import { cropLibrary, type CropId } from './constants/crops'
 import { generatePlanData } from './lib/planGenerator'
@@ -24,6 +25,9 @@ type Page =
   | 'replan'
   | 'work-schedule-employer'
   | 'work-schedule-employee'
+  | 'analytics'
+  | 'crop-comparison'
+  | 'plan-history'
 
 const BALANCED_RESERVE_PERCENT = 10
 
@@ -76,6 +80,21 @@ const createInitialGoalData = (
   cropGoals: createBalancedCropGoals(farm, selectedCropIds),
 })
 
+function loadFromStorage<T>(key: string, fallback: T): T {
+  try {
+    const stored = localStorage.getItem(key)
+    return stored ? JSON.parse(stored) : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function saveToStorage(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch { /* ignore quota errors */ }
+}
+
 function App() {
   const initialSetupFarmData = createInitialSetupFarmData()
   const initialSelectedCropIds = cropLibrary.map((crop) => crop.id)
@@ -88,6 +107,8 @@ function App() {
   )
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlanData | null>(null)
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([])
+  const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
+  const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
 
   if (page === 'dashboard') {
     return (
@@ -242,10 +263,13 @@ function App() {
   }
 
   return (
-    <WelcomePage
-      onOpenEmployer={() => setPage('setup-farm')}
-      onOpenEmployee={() => setPage('work-schedule-employee')}
-    />
+    <>
+      <Toaster position="top-right" />
+      <WelcomePage
+        onOpenEmployer={() => setPage('setup-farm')}
+        onOpenEmployee={() => setPage('work-schedule-employee')}
+      />
+    </>
   )
 }
 
