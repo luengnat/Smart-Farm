@@ -5,6 +5,8 @@ from app.models.nursery import NurseryBatch
 from app.models.disruption import Disruption
 from app.models.action import Action
 from app.models.snapshot import PlanSnapshot
+from app.models.user import User
+from app.models.farm_member import FarmMember
 
 __all__ = [
     "Farm",
@@ -16,4 +18,6 @@ __all__ = [
     "Disruption",
     "Action",
     "PlanSnapshot",
+    "User",
+    "FarmMember",
 ]

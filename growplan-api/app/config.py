@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     solver_timeout_seconds: int = 10
     solver_max_timeout_seconds: int = 30
     solver_queue_depth: int = 5
-    api_key: str = "dev-key-change-in-production"
+    jwt_secret: str = "dev-jwt-secret-change-in-production"
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
 

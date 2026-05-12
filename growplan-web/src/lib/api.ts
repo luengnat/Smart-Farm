@@ -1,10 +1,8 @@
 import toast from 'react-hot-toast'
-import { generatePlanData } from './planGenerator'
+import type { CropId } from '../constants/crops'
 import type {
   AnalyticsData,
   CropComparisonData,
-  CropId,
-  CropCommitment,
   GeneratedPlanData,
   GoalData,
   HistoryData,
@@ -16,76 +14,67 @@ import type {
 const API_BASE = import.meta.env.PROD
   ? '/api'
   : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
-const API_KEY = import.meta.env.VITE_API_KEY || 'dev-key-change-in-production'
 
-let backendAvailable = true
+function getToken(): string | null {
+  return sessionStorage.getItem('gp_token')
+}
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string> ?? {}),
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
   const resp = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': API_KEY,
-      ...options?.headers,
-    },
+    headers,
   })
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}))
-    const message = body.error?.message ?? `API error ${resp.status}`
-    toast.error(message)
+    const message = body.error?.message ?? body.detail ?? `API error ${resp.status}`
+    if (resp.status !== 401) {
+      toast.error(message)
+    }
     throw new Error(message)
   }
   return resp.json()
 }
 
-export function isBackendAvailable(): boolean {
-  return backendAvailable
-}
+export { apiFetch }
 
 export async function generatePlan(
   params: { farm: SetupFarmData; selectedCropIds: CropId[]; goalData: GoalData },
   farmId?: number,
-): Promise<{ planId: number | null; plan: GeneratedPlanData; usedBackend: boolean }> {
-  if (!backendAvailable || !farmId) {
-    const plan = generatePlanData({
-      farm: params.farm,
-      selectedCropIds: params.selectedCropIds,
-      goalData: params.goalData,
-    })
-    return { planId: null, plan, usedBackend: false }
+): Promise<{ planId: number | null; plan: GeneratedPlanData }> {
+  if (!farmId) {
+    throw new Error('Farm ID required to generate plan')
   }
 
-  try {
-    const commitments: Record<string, { enabled: boolean; minKgPerWeek: number }> = {}
-    for (const [id, c] of Object.entries(params.goalData.commitments)) {
-      commitments[id] = { enabled: c.enabled, minKgPerWeek: c.minKgPerWeek }
-    }
-
-    const resp = await apiFetch<{ planId: number; status: string; pollUrl: string }>('/plans/generate', {
-      method: 'POST',
-      body: JSON.stringify({
-        farmId,
-        selectedCropIds: params.selectedCropIds,
-        goal: {
-          planningHorizonWeeks: params.goalData.planningHorizonWeeks,
-          priority: params.goalData.priority,
-          commitments,
-        },
-      }),
-    })
-
-    const plan = await pollForPlan(resp.planId)
-    return { planId: resp.planId, plan, usedBackend: true }
-  } catch (err) {
-    console.warn('Backend unavailable, falling back to client-side generator:', err)
-    backendAvailable = false
-    const plan = generatePlanData({
-      farm: params.farm,
-      selectedCropIds: params.selectedCropIds,
-      goalData: params.goalData,
-    })
-    return { planId: null, plan, usedBackend: false }
+  const commitments: Record<string, { enabled: boolean; minKgPerWeek: number }> = {}
+  for (const [id, goal] of Object.entries(params.goalData.cropGoals)) {
+    commitments[id] = { enabled: goal.targetPerWeek > 0, minKgPerWeek: goal.targetPerWeek }
   }
+
+  const horizonWeeks = parseInt(params.goalData.planningHorizon, 10) || 8
+
+  const resp = await apiFetch<{ planId: number; status: string; pollUrl: string }>('/plans/generate', {
+    method: 'POST',
+    body: JSON.stringify({
+      farmId,
+      selectedCropIds: params.selectedCropIds,
+      goal: {
+        planningHorizonWeeks: horizonWeeks,
+        priority: params.goalData.priority,
+        commitments,
+      },
+    }),
+  })
+
+  const plan = await pollForPlan(resp.planId)
+  return { planId: resp.planId, plan }
 }
 
 async function pollForPlan(planId: number, maxAttempts = 30, intervalMs = 500): Promise<GeneratedPlanData> {
@@ -105,58 +94,41 @@ async function pollForPlan(planId: number, maxAttempts = 30, intervalMs = 500): 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
   const data = await apiFetch<Record<string, any>>(`/plans/${planId}`)
-  return {
-    rows: data.rows,
-    columns: data.columns,
-    totalGrids: data.totalGrids,
-    cells: (data.cells ?? []).map((c: Record<string, any>) => ({
-      index: c.index,
-      cropId: c.cropId,
-      status: c.status,
-      weekStarted: c.weekStarted,
-      weekHarvestExpected: c.weekHarvestExpected,
-    })),
-    allocations: (data.allocations ?? []).map((a: Record<string, any>) => ({
-      cropId: a.cropId,
-      gridsAllocated: a.gridsAllocated,
-      gridsPerSection: 1,
-      harvestCycleWeeks: 1,
-      sustainableKgPerWeek: a.sustainableKgPerWeek,
-      revenuePerWeek: a.revenuePerWeek,
-      revenuePerGridWeek: a.revenuePerWeek / Math.max(a.gridsAllocated, 1),
-      seedlingsPerCycle: 0,
-      traysPerCycle: 0,
-    })),
-    rotations: [],
-    nurseryBatches: [],
-    nurseryOccupancy: [],
-    revenue: data.revenue
-      ? {
-          totalRevenuePerWeek: data.revenue.totalRevenuePerWeek,
-          maxPossibleRevenuePerWeek: data.revenue.maxPossibleRevenuePerWeek,
-          revenueGap: data.revenue.revenueGap,
-          revenueByCrop: data.revenue.revenueByCrop,
-          opportunityCostOfCommitments: data.revenue.opportunityCostOfCommitments,
-        }
-      : {
-          totalRevenuePerWeek: 0,
-          maxPossibleRevenuePerWeek: 0,
-          revenueGap: 0,
-          revenueByCrop: {},
-          opportunityCostOfCommitments: 0,
-        },
-    horizonWeeks: data.horizonWeeks,
-  }
-}
+  const rows = data.rows ?? 0
+  const columns = data.columns ?? 0
+  const totalGrids = rows * columns
+  const cells = (data.cells ?? []).map((c: Record<string, any>) => ({
+    cropId: c.cropId ?? '',
+    color: '',
+    label: c.cropId ?? '',
+  }))
+  const allocations = data.allocations ?? []
+  const totalAllocated = allocations.reduce((sum: number, a: Record<string, any>) => sum + (a.gridsAllocated ?? 0), 0)
+  const revenue = data.revenue
+  const totalRevenue = revenue?.totalPerWeek ?? revenue?.totalRevenuePerWeek ?? 0
 
-export async function checkBackendHealth(): Promise<boolean> {
-  try {
-    const resp = await fetch(`${API_BASE}/health`)
-    backendAvailable = resp.ok
-    return resp.ok
-  } catch {
-    backendAvailable = false
-    return false
+  return {
+    rows,
+    columns,
+    cells,
+    utilizationPercent: totalGrids > 0 ? Math.round((totalAllocated / totalGrids) * 100) : 0,
+    requiredCapacity: totalAllocated,
+    availableCapacity: totalGrids,
+    stockoutRisk: 'Low' as const,
+    seedlingCapacityRisk: 'Low' as const,
+    expectedRevenue: totalRevenue,
+    cropSummaries: allocations.map((a: Record<string, any>) => ({
+      cropId: a.cropId,
+      label: a.cropId,
+      color: '',
+      allocatedCells: a.gridsAllocated,
+      targetPerWeek: 0,
+      reservePercent: 0,
+      seedlingsPerWeek: 0,
+    })),
+    timelineRows: [],
+    nurserySchedule: [],
+    nurseryLoad: [],
   }
 }
 
@@ -168,9 +140,12 @@ export async function fetchFarm(id: number): Promise<SetupFarmData> {
     rows: data.rows as number,
     columns: data.columns as number,
     growingSystem: (data.growingSystem as string) || 'hydroponic',
-    nurseryTrayCount: data.nurseryTrayCount as number,
-    nurseryTrayCells: data.nurseryTrayCells as number,
-    nurseryBufferPercent: data.nurseryBufferPercent as number,
+    nurseryCapacity: (data.nurseryTrayCount as number) * (data.nurseryTrayCells as number) || 200,
+    seedlingLeadDays: 14,
+    lightingZones: 3,
+    irrigationZones: 2,
+    lightingAssignments: [],
+    irrigationAssignments: [],
   }
 }
 
@@ -183,9 +158,9 @@ export async function saveFarm(data: SetupFarmData): Promise<{ id: number }> {
       rows: data.rows,
       columns: data.columns,
       growingSystem: data.growingSystem,
-      nurseryTrayCount: data.nurseryTrayCount,
-      nurseryTrayCells: data.nurseryTrayCells,
-      nurseryBufferPercent: data.nurseryBufferPercent,
+      nurseryTrayCount: Math.ceil(data.nurseryCapacity / 200) || 1,
+      nurseryTrayCells: 200,
+      nurseryBufferPercent: 10,
     }),
   })
 }
@@ -215,9 +190,10 @@ export async function fetchCropComparison(planId: number): Promise<CropCompariso
 }
 
 export async function exportPlan(planId: number): Promise<Blob> {
-  const resp = await fetch(`${API_BASE}/plans/${planId}/export`, {
-    headers: { 'X-API-Key': API_KEY },
-  })
+  const token = getToken()
+  const headers: Record<string, string> = {}
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const resp = await fetch(`${API_BASE}/plans/${planId}/export`, { headers })
   if (!resp.ok) throw new Error(`Export failed: ${resp.status}`)
   return resp.blob()
 }

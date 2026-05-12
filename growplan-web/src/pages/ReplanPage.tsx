@@ -15,7 +15,6 @@ import { AppHeader } from '../components/AppHeader'
 import { SetupProgress } from '../components/SetupProgress'
 import { StepActions } from '../components/StepActions'
 import { cropLibrary, type CropId } from '../constants/crops'
-import { generatePlanData } from '../lib/planGenerator'
 import type { GeneratedPlanData, GoalData, NurseryBatch, NurseryLoadWeek, SetupFarmData } from '../types/planning'
 
 type ReplanPageProps = {
@@ -198,16 +197,15 @@ export function ReplanPage({
     { id: 4, title: 'Apply', subtitle: 'Send suggestion back to dashboard' },
   ], [primaryCropName])
 
-  const resolvedPlan = useMemo(
-    () =>
-      generatedPlan ??
-      generatePlanData({
-        farm,
-        selectedCropIds,
-        goalData,
-      }),
-    [farm, generatedPlan, goalData, selectedCropIds],
-  )
+  const resolvedPlan = generatedPlan
+
+  if (!resolvedPlan) {
+    return (
+      <div style={{ padding: 'var(--space-8)', color: 'var(--color-text-secondary)' }}>
+        No plan data available for replanning.
+      </div>
+    )
+  }
 
   const replannedPlan = useMemo(
     () => createCropDelayReplan(resolvedPlan, farm, primaryCrop.id),

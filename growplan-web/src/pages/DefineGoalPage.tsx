@@ -4,7 +4,6 @@ import { AppHeader } from '../components/AppHeader'
 import { SetupProgress } from '../components/SetupProgress'
 import { StepActions } from '../components/StepActions'
 import { cropLibrary, type CropId } from '../constants/crops'
-import { generatePlanData } from '../lib/planGenerator'
 import { setupSteps } from '../constants/setupSteps'
 import type { CropGoalsById, GoalData, GoalPriority, SetupFarmData } from '../types/planning'
 
@@ -135,17 +134,20 @@ export function DefineGoalPage({
   }
 
   const planPreview = useMemo(
-    () =>
-      generatePlanData({
-        farm,
-        selectedCropIds,
-        goalData: {
-          planningHorizon,
-          priority,
-          cropGoals,
-        },
-      }),
-    [cropGoals, farm, planningHorizon, priority, selectedCropIds],
+    () => ({
+      cropSummaries: selectedCrops.map((crop) => ({
+        cropId: crop.id,
+        label: crop.name,
+        color: crop.accent,
+        allocatedCells: 0,
+        targetPerWeek: cropGoals[crop.id]?.targetPerWeek ?? 0,
+        reservePercent: cropGoals[crop.id]?.reservePercent ?? 0,
+        seedlingsPerWeek: 0,
+      })),
+      nurseryLoad: [] as Array<{ week: number; activeSeedlings: number; capacity: number; utilizationPercent: number; risk: 'Low' | 'Medium' | 'High' }>,
+      seedlingCapacityRisk: 'Low' as 'Low' | 'Medium' | 'High',
+    }),
+    [cropGoals, selectedCrops],
   )
 
   const totalSeedlingsPerWeek = useMemo(() => {

@@ -10,12 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.security import get_current_user
 from app.database import get_db
 from app.models.disruption import Disruption
 from app.models.farm import Farm
+from app.models.farm_member import FarmMember
 from app.models.nursery import NurseryBatch
 from app.models.plan import Allocation, GridCell, Plan
 from app.models.snapshot import PlanSnapshot
+from app.models.user import User
 from app.schemas.disruption import DisruptionRequest
 from app.schemas.plan import (
     AllocationResponse,
@@ -38,6 +41,20 @@ from app.schemas.analytics import (
 from app.services.analytics import compute_analytics, compute_crop_comparison
 
 router = APIRouter(prefix="/plans", tags=["plans"])
+
+
+def _verify_plan_access(plan_id: int, user: User, db: Session) -> Plan:
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    membership = (
+        db.query(FarmMember)
+        .filter(FarmMember.user_id == user.id, FarmMember.farm_id == plan.farm_id)
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=403, detail="No access to this plan")
+    return plan
 
 
 def _is_test_mode() -> bool:
@@ -83,6 +100,7 @@ def _create_snapshot(plan: Plan, snapshot_type: str, db: Session) -> None:
 @router.post("/generate", response_model=PlanGenerateResponse, status_code=202)
 def generate_plan(
     req: PlanGenerateRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     farm = db.query(Farm).filter(Farm.id == req.farm_id).first()
@@ -123,7 +141,8 @@ def generate_plan(
 
 
 @router.get("/{plan_id}/status", response_model=PlanStatusResponse)
-def get_plan_status(plan_id: int, db: Session = Depends(get_db)):
+def get_plan_status(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
     plan = db.query(Plan).filter(Plan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
@@ -137,10 +156,8 @@ def get_plan_status(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}", response_model=PlanResponse)
-def get_plan(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_plan(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
     cells = db.query(GridCell).filter(GridCell.plan_id == plan.id).all()
@@ -193,10 +210,8 @@ def get_plan(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{plan_id}/confirm")
-def confirm_plan(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def confirm_plan(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
     if plan.status == "confirmed":
         raise HTTPException(status_code=409, detail="Plan already confirmed")
     if plan.status != "completed":
@@ -210,10 +225,8 @@ def confirm_plan(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{plan_id}/advance-week")
-def advance_week(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def advance_week(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
     if plan.status != "confirmed":
         raise HTTPException(
             status_code=400, detail="Can only advance confirmed plans"
@@ -228,11 +241,10 @@ def advance_week(plan_id: int, db: Session = Depends(get_db)):
 def create_disruption(
     plan_id: int,
     req: DisruptionRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = _verify_plan_access(plan_id, current_user, db)
     disruption = Disruption(
         plan_id=plan_id,
         type=req.type,
@@ -248,10 +260,8 @@ def create_disruption(
 
 
 @router.post("/{plan_id}/replan")
-def replan_endpoint(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def replan_endpoint(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
     disruption = (
         db.query(Disruption)
         .filter(Disruption.plan_id == plan_id)
@@ -270,10 +280,8 @@ def replan_endpoint(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/actions")
-def get_actions(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_actions(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
     from app.services.actions import generate_action_queue
 
     actions = generate_action_queue(plan, plan.current_week, db)
@@ -281,10 +289,8 @@ def get_actions(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/costs")
-def get_costs(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_costs(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
     allocations = (
@@ -344,10 +350,8 @@ def get_costs(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/nursery")
-def get_nursery(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_nursery(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
     farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
     batches = (
         db.query(NurseryBatch)
@@ -388,10 +392,8 @@ def get_nursery(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/analytics", response_model=AnalyticsResponse)
-def get_analytics(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_analytics(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
     cells = db.query(GridCell).filter(GridCell.plan_id == plan_id).all()
@@ -425,10 +427,8 @@ def get_analytics(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/timeline", response_model=TimelineResponse)
-def get_timeline(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_timeline(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     cells = db.query(GridCell).filter(GridCell.plan_id == plan_id).all()
     from app.models.crop import Crop as CropModel
@@ -475,11 +475,10 @@ def get_history(
     plan_id: int,
     page: int = 1,
     limit: int = 50,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     query = db.query(PlanSnapshot).filter(PlanSnapshot.plan_id == plan_id)
     total = query.count()
@@ -511,10 +510,8 @@ def get_history(
 
 
 @router.get("/{plan_id}/compare", response_model=CompareResponse)
-def get_crop_comparison(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def get_crop_comparison(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     allocations = db.query(Allocation).filter(Allocation.plan_id == plan_id).all()
     from app.models.crop import Crop as CropModel
@@ -536,10 +533,8 @@ def get_crop_comparison(plan_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{plan_id}/export")
-def export_plan(plan_id: int, db: Session = Depends(get_db)):
-    plan = db.query(Plan).filter(Plan.id == plan_id).first()
-    if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+def export_plan(plan_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    plan = _verify_plan_access(plan_id, current_user, db)
 
     cells = db.query(GridCell).filter(GridCell.plan_id == plan_id).all()
     from fastapi.responses import Response
