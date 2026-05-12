@@ -16,6 +16,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { CropComparisonPage } from './pages/CropComparisonPage'
 import { PlanHistoryPage } from './pages/PlanHistoryPage'
 import { TasksPage } from './pages/TasksPage'
+import { apiFetch } from './lib/api'
 import type { CropGoalsById, GeneratedPlanData, GoalData, SetupFarmData } from './types/planning'
 
 type Page =
@@ -118,10 +119,10 @@ function clearWizardDraft() {
   localStorage.removeItem(WIZARD_KEY)
 }
 
-const SHELL_PAGES: Page[] = ['dashboard', 'analytics', 'crop-comparison', 'plan-history', 'replan']
+const SHELL_PAGES: Page[] = ['dashboard', 'analytics', 'crop-comparison', 'plan-history', 'tasks', 'replan']
 
 function AppContent() {
-  const { user, loading, logout } = useAuth()
+  const { user, loading, login: authLogin, register: authRegister, logout } = useAuth()
   const initialSetupFarmData = createInitialSetupFarmData()
   const draft = loadWizardDraft()
 
@@ -134,6 +135,46 @@ function AppContent() {
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlanData | null>(null)
   const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
   const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
+
+  // Load plan data from API on mount when authenticated
+  useEffect(() => {
+    if (!user || !planId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const plan = await apiFetch<GeneratedPlanData>(`/plans/${planId}`)
+        if (!cancelled) setGeneratedPlan(plan)
+      } catch { /* plan may not exist yet */ }
+    })()
+    return () => { cancelled = true }
+  }, [user, planId])
+
+  // Load farm data from API on mount
+  useEffect(() => {
+    if (!user || !farmId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const farm = await apiFetch<Record<string, unknown>>(`/farms/${farmId}`)
+        if (!cancelled) {
+          setSetupFarmData({
+            farmName: farm.name as string,
+            farmLocation: (farm.location as string) || '',
+            rows: farm.rows as number,
+            columns: farm.columns as number,
+            growingSystem: (farm.growingSystem as string) || 'hydroponic',
+            nurseryCapacity: ((farm.nurseryTrayCount as number) || 1) * ((farm.nurseryTrayCells as number) || 200),
+            seedlingLeadDays: 14,
+            lightingZones: 3,
+            irrigationZones: 2,
+            lightingAssignments: [],
+            irrigationAssignments: [],
+          })
+        }
+      } catch { /* farm may not exist yet */ }
+    })()
+    return () => { cancelled = true }
+  }, [user, farmId])
 
   useEffect(() => {
     if (!loading && !user && page !== 'register') {
@@ -163,7 +204,10 @@ function AppContent() {
       <>
         <Toaster position="top-right" />
         <LoginPage
-          onLogin={() => setPage(farmId ? 'dashboard' : 'setup-farm')}
+          onLogin={async (email: string, password: string) => {
+            await authLogin({ email, password })
+            setPage(farmId ? 'dashboard' : 'setup-farm')
+          }}
           onGoToRegister={() => setPage('register')}
         />
       </>
@@ -175,7 +219,10 @@ function AppContent() {
       <>
         <Toaster position="top-right" />
         <RegisterPage
-          onRegister={() => setPage('setup-farm')}
+          onRegister={async (email: string, password: string, displayName: string) => {
+            await authRegister({ email, password, displayName })
+            setPage('setup-farm')
+          }}
           onGoToLogin={() => setPage('login')}
         />
       </>
@@ -349,7 +396,10 @@ function AppContent() {
     <>
       <Toaster position="top-right" />
       <LoginPage
-        onLogin={() => setPage(farmId ? 'dashboard' : 'setup-farm')}
+        onLogin={async (email: string, password: string) => {
+          await authLogin({ email, password })
+          setPage(farmId ? 'dashboard' : 'setup-farm')
+        }}
         onGoToRegister={() => setPage('register')}
       />
     </>

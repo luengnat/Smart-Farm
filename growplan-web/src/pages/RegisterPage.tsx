@@ -10,11 +10,24 @@ export function RegisterPage({ onRegister, onGoToLogin }: RegisterPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password !== confirmPassword) return
-    onRegister(email, password, displayName)
+    setError(null)
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    setLoading(true)
+    try {
+      await onRegister(email, password, displayName)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -91,12 +104,17 @@ export function RegisterPage({ onRegister, onGoToLogin }: RegisterPageProps) {
               required
             />
           </div>
+          {error && (
+            <p style={{ color: 'var(--color-error, #ef4444)', fontSize: 'var(--text-sm)', margin: 0 }}>
+              {error}
+            </p>
+          )}
           <button
             className="btn btn-primary btn-full btn-lg"
             type="submit"
-            disabled={password.length < 8 || password !== confirmPassword}
+            disabled={loading || password.length < 8 || password !== confirmPassword}
           >
-            Create account
+            {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
         <p style={{

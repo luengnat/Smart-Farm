@@ -38,19 +38,21 @@ const DARK_LEGEND_STYLE = { color: 'var(--color-text-secondary)' }
 export function AnalyticsPage({ planId, onBack }: Props) {
   const [tab, setTab] = useState<Tab>('revenue-cost')
 
-  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+  const { data: analytics, isLoading: analyticsLoading, isError: analyticsError, refetch: refetchAnalytics } = useQuery({
     queryKey: ['analytics', planId],
     queryFn: () => fetchAnalytics(planId!),
     enabled: !!planId,
   })
 
-  const { data: timeline, isLoading: timelineLoading } = useQuery({
+  const { data: timeline, isLoading: timelineLoading, isError: timelineError, refetch: refetchTimeline } = useQuery({
     queryKey: ['timeline', planId],
     queryFn: () => fetchTimeline(planId!),
     enabled: !!planId,
   })
 
   const loading = tab === 'timeline' ? timelineLoading : analyticsLoading
+  const isError = tab === 'timeline' ? timelineError : analyticsError
+  const refetch = tab === 'timeline' ? refetchTimeline : refetchAnalytics
 
   if (!planId) {
     return (
@@ -81,6 +83,13 @@ export function AnalyticsPage({ planId, onBack }: Props) {
         <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '2rem' }}>
           Loading analytics...
         </p>
+      )}
+
+      {isError && (
+        <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+          <p style={{ marginBottom: 'var(--space-4)' }}>Failed to load data.</p>
+          <button className="btn btn-primary" onClick={() => refetch()}>Retry</button>
+        </div>
       )}
 
       {!loading && tab === 'revenue-cost' && analytics && (

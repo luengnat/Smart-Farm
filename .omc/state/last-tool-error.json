@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/nat/dev/Smart-Farm/.claude/worktrees/full-stack-improvements/growplan-api && ./venv/bin/python -c \\\"from app.main import app; print('FastAPI imports OK')\\\" 2>&1\",\"description\":\"V...",
+  "error": "Exit code 1\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from app.main import app; print('FastAPI imports OK')\n    ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/nat/dev/Smart-Farm/.claude/worktrees/full-stack-improvements/growplan-api/app/main.py\", line 5, in <module>\n    from app.api.auth import router as auth_router\n  File \"/Users/nat/dev/Smart-Farm/.claude/worktrees/full-stack-improvements/growplan-api/app/api/auth.py\", line 4, in <module>\n    from app.core.security...",
+  "timestamp": "2026-05-12T10:24:40.139Z",
+  "retry_count": 3
+}

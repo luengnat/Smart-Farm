@@ -23,11 +23,20 @@ const CHART_TOOLTIP_STYLE = {
 const DARK_LEGEND_STYLE = { color: 'var(--color-text-secondary)' }
 
 export function CropComparisonPage({ planId, onBack }: Props) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['comparison', planId],
     queryFn: () => fetchCropComparison(planId!),
     enabled: !!planId,
   })
+
+  if (isError) {
+    return (
+      <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
+        <p style={{ marginBottom: 'var(--space-4)' }}>Failed to load data.</p>
+        <button className="btn btn-primary" onClick={() => refetch()}>Retry</button>
+      </div>
+    )
+  }
 
   if (!planId) {
     return (
