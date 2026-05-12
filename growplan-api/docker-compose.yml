@@ -39,7 +39,7 @@ services:
     environment:
       GP_DATABASE_URL: postgresql+psycopg2://${GP_POSTGRES_USER:-growplan}:${GP_POSTGRES_PASSWORD}@postgres:5432/${GP_POSTGRES_DB:-growplan}
       GP_REDIS_URL: redis://:${GP_REDIS_PASSWORD}@redis:6379/0
-      GP_API_KEY: ${GP_API_KEY:?Set GP_API_KEY}
+      GP_JWT_SECRET: ${GP_JWT_SECRET:-change-me-in-production}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
     environment:
       GP_DATABASE_URL: postgresql+psycopg2://${GP_POSTGRES_USER:-growplan}:${GP_POSTGRES_PASSWORD}@postgres:5432/${GP_POSTGRES_DB:-growplan}
       GP_REDIS_URL: redis://:${GP_REDIS_PASSWORD}@redis:6379/0
-      GP_API_KEY: ${GP_API_KEY:?Set GP_API_KEY}
+      GP_JWT_SECRET: ${GP_JWT_SECRET:-change-me-in-production}
     depends_on:
       postgres:
         condition: service_healthy
