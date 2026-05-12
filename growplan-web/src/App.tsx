@@ -12,6 +12,9 @@ import { SelectCropsPage } from './pages/SelectCropsPage'
 import { SetupFarmPage } from './pages/SetupFarmPage'
 import { WelcomePage } from './pages/WelcomePage'
 import { WorkSchedulePage } from './pages/WorkSchedulePage'
+import { AnalyticsPage } from './pages/AnalyticsPage'
+import { CropComparisonPage } from './pages/CropComparisonPage'
+import { PlanHistoryPage } from './pages/PlanHistoryPage'
 import type { CropGoalsById, GeneratedPlanData, GoalData, SetupFarmData } from './types/planning'
 
 type Page =
@@ -110,6 +113,33 @@ function App() {
   const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
   const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
 
+  if (page === 'analytics') {
+    return (
+      <AnalyticsPage
+        planId={planId}
+        onBack={() => setPage('dashboard')}
+      />
+    )
+  }
+
+  if (page === 'crop-comparison') {
+    return (
+      <CropComparisonPage
+        planId={planId}
+        onBack={() => setPage('dashboard')}
+      />
+    )
+  }
+
+  if (page === 'plan-history') {
+    return (
+      <PlanHistoryPage
+        planId={planId}
+        onBack={() => setPage('dashboard')}
+      />
+    )
+  }
+
   if (page === 'dashboard') {
     return (
       <DashboardPage
@@ -120,6 +150,9 @@ function App() {
         onBackToConfirm={() => setPage('confirm-plan')}
         onOpenReplan={() => setPage('replan')}
         onOpenWorkSchedule={() => setPage('work-schedule-employer')}
+        onViewAnalytics={() => setPage('analytics')}
+        onViewCropComparison={() => setPage('crop-comparison')}
+        onViewPlanHistory={() => setPage('plan-history')}
       />
     )
   }
