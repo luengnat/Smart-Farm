@@ -58,3 +58,33 @@ def test_create_snapshot_on_confirm(client, db_session):
     assert snapshots[0].snapshot_type == "confirmed"
     assert len(snapshots[0].grid_data) == 1
     assert snapshots[0].grid_data[0]["crop_id"] == "lettuce"
+
+
+def test_create_snapshot_on_advance_week(client, db_session):
+    """Advancing a week should create a snapshot with type='week-advanced'."""
+    from app.models.farm import Farm
+    from app.models.plan import Plan
+
+    farm = Farm(
+        name="AW", location="B", rows=1, columns=2,
+        growing_system="hydroponic", nursery_tray_count=30,
+        nursery_tray_cells=200, nursery_buffer_pct=10,
+    )
+    db_session.add(farm)
+    db_session.commit()
+
+    plan = Plan(
+        farm_id=farm.id, horizon_weeks=10, status="confirmed",
+        goal_priority="maximize-revenue", selected_crops=["lettuce"],
+    )
+    db_session.add(plan)
+    db_session.commit()
+
+    resp = client.post(f"/plans/{plan.id}/advance-week")
+    assert resp.status_code == 200
+
+    snapshots = db_session.query(PlanSnapshot).filter(
+        PlanSnapshot.plan_id == plan.id
+    ).all()
+    assert len(snapshots) == 1
+    assert snapshots[0].snapshot_type == "week-advanced"
