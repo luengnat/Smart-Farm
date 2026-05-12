@@ -368,6 +368,7 @@ function AppContent() {
           selectedCropIds={selectedCropIds}
           goalData={goalData}
           generatedPlan={generatedPlan}
+          farmId={farmId}
           onBackToDashboard={() => setPage('dashboard')}
           onApplyPlan={(nextPlan) => {
             setGeneratedPlan(nextPlan)
