@@ -3,7 +3,9 @@ import { Toaster } from 'react-hot-toast'
 import './App.css'
 import { cropLibrary, type CropId } from './constants/crops'
 import { generatePlanData } from './lib/planGenerator'
-import { checkBackendHealth } from './lib/api'
+import { AppShell } from './components/AppShell'
+import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
 import { DefineGoalPage } from './pages/DefineGoalPage'
 import { ConfirmPlanPage } from './pages/ConfirmPlanPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -11,15 +13,14 @@ import { GeneratePlanPage } from './pages/GeneratePlanPage'
 import { ReplanPage } from './pages/ReplanPage'
 import { SelectCropsPage } from './pages/SelectCropsPage'
 import { SetupFarmPage } from './pages/SetupFarmPage'
-import { WelcomePage } from './pages/WelcomePage'
-import { WorkSchedulePage } from './pages/WorkSchedulePage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { CropComparisonPage } from './pages/CropComparisonPage'
 import { PlanHistoryPage } from './pages/PlanHistoryPage'
 import type { CropGoalsById, GeneratedPlanData, GoalData, SetupFarmData } from './types/planning'
 
 type Page =
-  | 'welcome'
+  | 'login'
+  | 'register'
   | 'setup-farm'
   | 'select-crops'
   | 'define-goal'
@@ -27,8 +28,6 @@ type Page =
   | 'confirm-plan'
   | 'dashboard'
   | 'replan'
-  | 'work-schedule-employer'
-  | 'work-schedule-employee'
   | 'analytics'
   | 'crop-comparison'
   | 'plan-history'
@@ -118,233 +117,208 @@ function clearWizardDraft() {
   localStorage.removeItem(WIZARD_KEY)
 }
 
+const SHELL_PAGES: Page[] = ['dashboard', 'analytics', 'crop-comparison', 'plan-history', 'replan']
+
 function App() {
   const initialSetupFarmData = createInitialSetupFarmData()
-  const initialSelectedCropIds = cropLibrary.map((crop) => crop.id)
   const draft = loadWizardDraft()
 
-  const [page, setPage] = useState<Page>((draft?.page as Page) || 'welcome')
+  const [page, setPage] = useState<Page>((draft?.page as Page) || 'login')
   const [setupFarmData, setSetupFarmData] = useState<SetupFarmData>(draft?.setupFarmData || initialSetupFarmData)
-  const [selectedCropIds, setSelectedCropIds] = useState<CropId[]>(draft?.selectedCropIds || initialSelectedCropIds)
+  const [selectedCropIds, setSelectedCropIds] = useState<CropId[]>(draft?.selectedCropIds || [])
   const [goalData, setGoalData] = useState<GoalData>(
-    createInitialGoalData(draft?.setupFarmData || initialSetupFarmData, draft?.selectedCropIds || initialSelectedCropIds),
+    createInitialGoalData(draft?.setupFarmData || initialSetupFarmData, draft?.selectedCropIds || []),
   )
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlanData | null>(null)
-  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>([])
   const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
   const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
 
-  const [backendOnline, setBackendOnline] = useState(true)
-
-  useEffect(() => {
-    checkBackendHealth().then(setBackendOnline)
-  }, [])
-
-  if (!backendOnline && (page === 'analytics' || page === 'crop-comparison' || page === 'plan-history')) {
+  // Auth pages (no shell)
+  if (page === 'login') {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2>Backend Required</h2>
-        <p style={{ color: '#888' }}>Start the API server to see analytics data</p>
-        <button onClick={() => setPage('dashboard')}>Back to Dashboard</button>
-      </div>
+      <>
+        <Toaster position="top-right" />
+        <LoginPage
+          onLogin={() => setPage('dashboard')}
+          onGoToRegister={() => setPage('register')}
+        />
+      </>
     )
   }
 
-  if (page === 'analytics') {
+  if (page === 'register') {
     return (
-      <AnalyticsPage
-        planId={planId}
-        onBack={() => setPage('dashboard')}
-      />
+      <>
+        <Toaster position="top-right" />
+        <RegisterPage
+          onRegister={() => setPage('setup-farm')}
+          onGoToLogin={() => setPage('login')}
+        />
+      </>
     )
   }
 
-  if (page === 'crop-comparison') {
+  // Wizard pages (no shell)
+  if (page === 'setup-farm') {
     return (
-      <CropComparisonPage
-        planId={planId}
-        onBack={() => setPage('dashboard')}
-      />
-    )
-  }
-
-  if (page === 'plan-history') {
-    return (
-      <PlanHistoryPage
-        planId={planId}
-        onBack={() => setPage('dashboard')}
-      />
-    )
-  }
-
-  if (page === 'dashboard') {
-    return (
-      <DashboardPage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        goalData={goalData}
-        generatedPlan={generatedPlan}
-        onBackToConfirm={() => setPage('confirm-plan')}
-        onOpenReplan={() => setPage('replan')}
-      />
-    )
-  }
-
-  if (page === 'work-schedule-employer') {
-    return (
-      <WorkSchedulePage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        goalData={goalData}
-        generatedPlan={generatedPlan}
-        mode="employer"
-        completedTaskIds={completedTaskIds}
-        onToggleTask={(taskId) => {
-          setCompletedTaskIds((prev) =>
-            prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId],
-          )
-        }}
-        onBack={() => setPage('dashboard')}
-      />
-    )
-  }
-
-  if (page === 'work-schedule-employee') {
-    return (
-      <WorkSchedulePage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        goalData={goalData}
-        generatedPlan={generatedPlan}
-        mode="employee"
-        completedTaskIds={completedTaskIds}
-        onToggleTask={(taskId) => {
-          setCompletedTaskIds((prev) =>
-            prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId],
-          )
-        }}
-        onBack={() => setPage('welcome')}
-      />
-    )
-  }
-
-  if (page === 'replan') {
-    return (
-      <ReplanPage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        goalData={goalData}
-        generatedPlan={generatedPlan}
-        onBackToDashboard={() => setPage('dashboard')}
-        onApplyPlan={(nextPlan) => {
-          setGeneratedPlan(nextPlan)
-          setPage('dashboard')
-        }}
-      />
-    )
-  }
-
-  if (page === 'confirm-plan') {
-    return (
-      <ConfirmPlanPage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        goalData={goalData}
-        generatedPlan={generatedPlan}
-        onBackToGenerate={() => setPage('generate-plan')}
-        onConfirm={() => setPage('dashboard')}
-      />
-    )
-  }
-
-  if (page === 'generate-plan') {
-    return (
-      <GeneratePlanPage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        goalData={goalData}
-        generatedPlan={generatedPlan}
-        onGeneratePlan={(nextPlan) => { setGeneratedPlan(nextPlan); clearWizardDraft() }}
-        onBackToDefineGoal={() => setPage('define-goal')}
-        onContinue={() => setPage('confirm-plan')}
-      />
-    )
-  }
-
-  if (page === 'define-goal') {
-    return (
-      <DefineGoalPage
-        farm={setupFarmData}
-        selectedCropIds={selectedCropIds}
-        initialGoalData={goalData}
-        onBackToSelectCrops={() => setPage('select-crops')}
-        onContinue={(nextGoalData) => {
-          setGoalData(nextGoalData)
-          setGeneratedPlan(generatePlanData({
-            farm: setupFarmData,
-            selectedCropIds,
-            goalData: nextGoalData,
-          }))
-          saveWizardDraft({ page: 'generate-plan', selectedCropIds })
-          setPage('generate-plan')
-        }}
-      />
+      <>
+        <Toaster position="top-right" />
+        <SetupFarmPage
+          initialData={setupFarmData}
+          onBackToWelcome={() => setPage('login')}
+          onContinue={(nextSetupFarmData) => {
+            setSetupFarmData(nextSetupFarmData)
+            setGoalData((prev) => ({
+              ...prev,
+              cropGoals: createBalancedCropGoals(nextSetupFarmData, selectedCropIds),
+            }))
+            setGeneratedPlan(null)
+            saveWizardDraft({ page: 'select-crops', setupFarmData: nextSetupFarmData, selectedCropIds })
+            setPage('select-crops')
+          }}
+        />
+      </>
     )
   }
 
   if (page === 'select-crops') {
     return (
-      <SelectCropsPage
-        farmName={setupFarmData.farmName}
-        selectedCropIds={selectedCropIds}
-        onBackToSetup={() => setPage('setup-farm')}
-        onContinue={(nextSelectedCropIds) => {
-          setSelectedCropIds(nextSelectedCropIds)
-          setGoalData((prev) => ({
-            ...prev,
-            cropGoals: createBalancedCropGoals(setupFarmData, nextSelectedCropIds),
-          }))
-          setGeneratedPlan(null)
-          saveWizardDraft({ page: 'define-goal', selectedCropIds: nextSelectedCropIds })
-          setPage('define-goal')
-        }}
-      />
+      <>
+        <Toaster position="top-right" />
+        <SelectCropsPage
+          farmName={setupFarmData.farmName}
+          selectedCropIds={selectedCropIds}
+          onBackToSetup={() => setPage('setup-farm')}
+          onContinue={(nextSelectedCropIds) => {
+            setSelectedCropIds(nextSelectedCropIds)
+            setGoalData((prev) => ({
+              ...prev,
+              cropGoals: createBalancedCropGoals(setupFarmData, nextSelectedCropIds),
+            }))
+            setGeneratedPlan(null)
+            saveWizardDraft({ page: 'define-goal', selectedCropIds: nextSelectedCropIds })
+            setPage('define-goal')
+          }}
+        />
+      </>
     )
   }
 
-  if (page === 'setup-farm') {
+  if (page === 'define-goal') {
     return (
-      <SetupFarmPage
-        initialData={setupFarmData}
-        onBackToWelcome={() => setPage('welcome')}
-        onContinue={(nextSetupFarmData) => {
-          setSetupFarmData(nextSetupFarmData)
-          setGoalData((prev) => ({
-            ...prev,
-            cropGoals: createBalancedCropGoals(nextSetupFarmData, selectedCropIds),
-          }))
-          setGeneratedPlan(null)
-          saveWizardDraft({ page: 'select-crops', setupFarmData: nextSetupFarmData, selectedCropIds })
-          setPage('select-crops')
-        }}
-      />
+      <>
+        <Toaster position="top-right" />
+        <DefineGoalPage
+          farm={setupFarmData}
+          selectedCropIds={selectedCropIds}
+          initialGoalData={goalData}
+          onBackToSelectCrops={() => setPage('select-crops')}
+          onContinue={(nextGoalData) => {
+            setGoalData(nextGoalData)
+            setGeneratedPlan(generatePlanData({
+              farm: setupFarmData,
+              selectedCropIds,
+              goalData: nextGoalData,
+            }))
+            saveWizardDraft({ page: 'generate-plan', selectedCropIds })
+            setPage('generate-plan')
+          }}
+        />
+      </>
     )
   }
 
+  if (page === 'generate-plan') {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <GeneratePlanPage
+          farm={setupFarmData}
+          selectedCropIds={selectedCropIds}
+          goalData={goalData}
+          generatedPlan={generatedPlan}
+          onGeneratePlan={(nextPlan) => { setGeneratedPlan(nextPlan); clearWizardDraft() }}
+          onBackToDefineGoal={() => setPage('define-goal')}
+          onContinue={() => setPage('confirm-plan')}
+        />
+      </>
+    )
+  }
+
+  if (page === 'confirm-plan') {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <ConfirmPlanPage
+          farm={setupFarmData}
+          selectedCropIds={selectedCropIds}
+          goalData={goalData}
+          generatedPlan={generatedPlan}
+          onBackToGenerate={() => setPage('generate-plan')}
+          onConfirm={() => setPage('dashboard')}
+        />
+      </>
+    )
+  }
+
+  // Shell pages (with AppShell)
+  if (SHELL_PAGES.includes(page)) {
+    let content: React.ReactNode
+
+    if (page === 'dashboard') {
+      content = (
+        <DashboardPage
+          farm={setupFarmData}
+          selectedCropIds={selectedCropIds}
+          goalData={goalData}
+          generatedPlan={generatedPlan}
+          onBackToConfirm={() => setPage('confirm-plan')}
+          onOpenReplan={() => setPage('replan')}
+        />
+      )
+    } else if (page === 'analytics') {
+      content = <AnalyticsPage planId={planId} onBack={() => setPage('dashboard')} />
+    } else if (page === 'crop-comparison') {
+      content = <CropComparisonPage planId={planId} onBack={() => setPage('dashboard')} />
+    } else if (page === 'plan-history') {
+      content = <PlanHistoryPage planId={planId} onBack={() => setPage('dashboard')} />
+    } else if (page === 'replan') {
+      content = (
+        <ReplanPage
+          farm={setupFarmData}
+          selectedCropIds={selectedCropIds}
+          goalData={goalData}
+          generatedPlan={generatedPlan}
+          onBackToDashboard={() => setPage('dashboard')}
+          onApplyPlan={(nextPlan) => {
+            setGeneratedPlan(nextPlan)
+            setPage('dashboard')
+          }}
+        />
+      )
+    }
+
+    return (
+      <>
+        <Toaster position="top-right" />
+        <AppShell
+          currentPage={page}
+          onNavigate={(p) => setPage(p as Page)}
+          farmName={setupFarmData.farmName}
+        >
+          {content}
+        </AppShell>
+      </>
+    )
+  }
+
+  // Fallback (should not reach here)
   return (
     <>
-      {!backendOnline && (
-        <div style={{
-          padding: '0.5rem', background: '#fff3cd', borderBottom: '1px solid #ffc107',
-          textAlign: 'center', fontSize: '0.85rem', color: '#856404',
-        }}>
-          Running in offline mode — analytics and history require the backend
-        </div>
-      )}
       <Toaster position="top-right" />
-      <WelcomePage
-        onOpenEmployer={() => setPage('setup-farm')}
-        onOpenEmployee={() => setPage('work-schedule-employee')}
+      <LoginPage
+        onLogin={() => setPage('dashboard')}
+        onGoToRegister={() => setPage('register')}
       />
     </>
   )
