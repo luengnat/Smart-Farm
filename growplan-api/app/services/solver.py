@@ -134,7 +134,7 @@ def build_model(
             model.Add(sum(x[cid, g, w] for cid in crop_ids) <= 1)
 
     # 5. Nursery tray capacity per week.
-    buffer_pct = farm.get("nursery_buffer_pct", 0)
+    buffer_pct = int(farm.get("nursery_buffer_pct", 0))
     effective_trays = max(
         1, nursery_total_trays - (nursery_total_trays * buffer_pct // 100)
     )
