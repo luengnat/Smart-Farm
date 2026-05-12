@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { LayoutGrid, BarChart3, Sprout, Clock, Settings } from 'lucide-react'
+import { LayoutGrid, BarChart3, Sprout, Clock, Settings, LogOut } from 'lucide-react'
 
 type ShellPage = 'dashboard' | 'analytics' | 'crop-comparison' | 'plan-history' | 'settings'
 
@@ -21,6 +21,7 @@ interface AppShellProps {
   currentPage: string
   onNavigate: (page: ShellPage) => void
   farmName?: string
+  onLogout?: () => void
   children: ReactNode
 }
 
@@ -73,7 +74,7 @@ const shellStyles = {
   },
 }
 
-export function AppShell({ currentPage, onNavigate, farmName, children }: AppShellProps) {
+export function AppShell({ currentPage, onNavigate, farmName, onLogout, children }: AppShellProps) {
   return (
     <div style={shellStyles.container}>
       <div style={shellStyles.sidebar}>
@@ -94,7 +95,26 @@ export function AppShell({ currentPage, onNavigate, farmName, children }: AppShe
             GrowPlan
           </span>
           <span style={shellStyles.topbarTitle}>{farmName || 'My Farm'}</span>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)' }} />
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Sign out"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-muted)',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
         </div>
         <div style={shellStyles.content}>
           {children}

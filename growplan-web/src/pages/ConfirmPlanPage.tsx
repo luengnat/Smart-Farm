@@ -14,7 +14,6 @@ import { AppHeader } from '../components/AppHeader'
 import { SetupProgress } from '../components/SetupProgress'
 import { StepActions } from '../components/StepActions'
 import type { CropId } from '../constants/crops'
-import { generatePlanData } from '../lib/planGenerator'
 import { setupSteps } from '../constants/setupSteps'
 import type { GeneratedPlanData, GoalData, SetupFarmData } from '../types/planning'
 
@@ -29,22 +28,18 @@ type ConfirmPlanPageProps = {
 
 export function ConfirmPlanPage({
   farm,
-  selectedCropIds,
-  goalData,
   generatedPlan,
   onBackToGenerate,
   onConfirm,
 }: ConfirmPlanPageProps) {
-  const resolvedPlan = useMemo(
-    () =>
-      generatedPlan ??
-      generatePlanData({
-        farm,
-        selectedCropIds,
-        goalData,
-      }),
-    [farm, generatedPlan, goalData, selectedCropIds],
-  )
+  if (!generatedPlan) {
+    return (
+      <div style={{ padding: 'var(--space-8)', color: 'var(--color-text-secondary)' }}>
+        No plan data available. Go back to generate a plan first.
+      </div>
+    )
+  }
+  const resolvedPlan = generatedPlan
 
   const timelineRows = useMemo(() => {
     return resolvedPlan.timelineRows

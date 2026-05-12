@@ -1,7 +1,5 @@
 import { useMemo } from 'react'
-import { Grid3X3, Leaf, Sprout, Droplets, Waves, Thermometer, Clock } from 'lucide-react'
 import { cropLibrary, type CropId } from '../constants/crops'
-import { generatePlanData } from '../lib/planGenerator'
 import type { GeneratedPlanData, GoalData, SetupFarmData } from '../types/planning'
 import { Metric } from '../components/Metric'
 
@@ -35,7 +33,6 @@ const MONO: React.CSSProperties = {
 export function DashboardPage({
   farm,
   selectedCropIds,
-  goalData,
   generatedPlan,
   onBackToConfirm,
   onOpenReplan,
@@ -45,16 +42,15 @@ export function DashboardPage({
     [selectedCropIds],
   )
 
-  const resolvedPlan = useMemo(
-    () =>
-      generatedPlan ??
-      generatePlanData({
-        farm,
-        selectedCropIds,
-        goalData,
-      }),
-    [farm, generatedPlan, goalData, selectedCropIds],
-  )
+  const resolvedPlan = generatedPlan
+
+  if (!resolvedPlan) {
+    return (
+      <div style={{ padding: 'var(--space-8)', color: 'var(--color-text-secondary)' }}>
+        No plan data available. Complete the setup wizard to generate a plan.
+      </div>
+    )
+  }
 
   // --- Revenue computation ---
   const pricePerKgByCrop: Record<CropId, number> = {

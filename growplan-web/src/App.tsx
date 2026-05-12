@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { cropLibrary, type CropId } from './constants/crops'
-import { generatePlanData } from './lib/planGenerator'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppShell } from './components/AppShell'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
@@ -34,8 +34,8 @@ type Page =
 const BALANCED_RESERVE_PERCENT = 10
 
 const createInitialSetupFarmData = (): SetupFarmData => ({
-  farmName: 'GreenRise Farm',
-  farmLocation: 'Bangkok',
+  farmName: '',
+  farmLocation: '',
   rows: 10,
   columns: 12,
   lightingZones: 3,
@@ -118,7 +118,8 @@ function clearWizardDraft() {
 
 const SHELL_PAGES: Page[] = ['dashboard', 'analytics', 'crop-comparison', 'plan-history', 'replan']
 
-function App() {
+function AppContent() {
+  const { user, loading, logout } = useAuth()
   const initialSetupFarmData = createInitialSetupFarmData()
   const draft = loadWizardDraft()
 
@@ -132,13 +133,35 @@ function App() {
   const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
   const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
 
+  useEffect(() => {
+    if (!loading && !user && page !== 'register') {
+      setPage('login')
+    }
+  }, [user, loading, page])
+
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--color-bg-base)',
+        color: 'var(--color-text-secondary)',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        Loading...
+      </div>
+    )
+  }
+
   // Auth pages (no shell)
   if (page === 'login') {
     return (
       <>
         <Toaster position="top-right" />
         <LoginPage
-          onLogin={() => setPage('dashboard')}
+          onLogin={() => setPage(farmId ? 'dashboard' : 'setup-farm')}
           onGoToRegister={() => setPage('register')}
         />
       </>
@@ -164,7 +187,7 @@ function App() {
         <Toaster position="top-right" />
         <SetupFarmPage
           initialData={setupFarmData}
-          onBackToWelcome={() => setPage('login')}
+          onBackToWelcome={() => { logout(); setPage('login') }}
           onContinue={(nextSetupFarmData) => {
             setSetupFarmData(nextSetupFarmData)
             setGoalData((prev) => ({
@@ -214,11 +237,6 @@ function App() {
           onBackToSelectCrops={() => setPage('select-crops')}
           onContinue={(nextGoalData) => {
             setGoalData(nextGoalData)
-            setGeneratedPlan(generatePlanData({
-              farm: setupFarmData,
-              selectedCropIds,
-              goalData: nextGoalData,
-            }))
             saveWizardDraft({ page: 'generate-plan', selectedCropIds })
             setPage('generate-plan')
           }}
@@ -236,7 +254,18 @@ function App() {
           selectedCropIds={selectedCropIds}
           goalData={goalData}
           generatedPlan={generatedPlan}
-          onGeneratePlan={(nextPlan) => { setGeneratedPlan(nextPlan); clearWizardDraft() }}
+          onGeneratePlan={(nextPlan) => {
+            setGeneratedPlan(nextPlan)
+            clearWizardDraft()
+          }}
+          onFarmCreated={(newFarmId) => {
+            setFarmId(newFarmId)
+            saveToStorage('gp_farmId', newFarmId)
+          }}
+          onPlanCreated={(newPlanId) => {
+            setPlanId(newPlanId)
+            saveToStorage('gp_planId', newPlanId)
+          }}
           onBackToDefineGoal={() => setPage('define-goal')}
           onContinue={() => setPage('confirm-plan')}
         />
@@ -304,6 +333,7 @@ function App() {
           currentPage={page}
           onNavigate={(p) => setPage(p as Page)}
           farmName={setupFarmData.farmName}
+          onLogout={() => { logout(); setPage('login') }}
         >
           {content}
         </AppShell>
@@ -311,15 +341,22 @@ function App() {
     )
   }
 
-  // Fallback (should not reach here)
   return (
     <>
       <Toaster position="top-right" />
       <LoginPage
-        onLogin={() => setPage('dashboard')}
+        onLogin={() => setPage(farmId ? 'dashboard' : 'setup-farm')}
         onGoToRegister={() => setPage('register')}
       />
     </>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   )
 }
 
