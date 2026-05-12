@@ -5,8 +5,10 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   AreaChart, Area, BarChart, Bar, ResponsiveContainer,
 } from 'recharts'
+import { ArrowLeft } from 'lucide-react'
 import { fetchAnalytics, fetchTimeline } from '../lib/api'
 import { cropLibrary } from '../constants/crops'
+import { TabBar } from '../components/TabBar'
 import type { AnalyticsData, TimelineData } from '../types/planning'
 
 type Tab = 'revenue-cost' | 'timeline' | 'profitability'
@@ -15,6 +17,23 @@ type Props = {
   planId: number | null
   onBack: () => void
 }
+
+const TABS = [
+  { id: 'revenue-cost', label: 'Revenue & Cost' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'profitability', label: 'Profitability' },
+]
+
+const CHART_TOOLTIP_STYLE = {
+  background: 'var(--color-bg-elevated)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-md)',
+  color: 'var(--color-text-primary)',
+}
+
+const DARK_AXIS_TICK = { fill: 'var(--color-text-secondary)', fontSize: 11 }
+const DARK_AXIS_LINE = { stroke: 'var(--color-border)' }
+const DARK_LEGEND_STYLE = { color: 'var(--color-text-secondary)' }
 
 export function AnalyticsPage({ planId, onBack }: Props) {
   const [tab, setTab] = useState<Tab>('revenue-cost')
@@ -36,9 +55,13 @@ export function AnalyticsPage({ planId, onBack }: Props) {
   if (!planId) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2>Analytics</h2>
-        <p style={{ color: '#888' }}>Generate a plan to see analytics</p>
-        <button onClick={onBack}>Back to Dashboard</button>
+        <h2 style={{ color: 'var(--color-text-primary)', marginBottom: '0.75rem' }}>Analytics</h2>
+        <p style={{ color: 'var(--color-text-secondary)', marginBottom: '1.5rem' }}>
+          Generate a plan to see analytics
+        </p>
+        <button className="btn btn-ghost" onClick={onBack}>
+          <ArrowLeft size={16} /> Back to Dashboard
+        </button>
       </div>
     )
   }
@@ -46,30 +69,19 @@ export function AnalyticsPage({ planId, onBack }: Props) {
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-        <button onClick={onBack} style={{ padding: '0.4rem 1rem' }}>← Back</button>
-        <h2 style={{ margin: 0 }}>Analytics</h2>
+        <button className="btn btn-ghost" onClick={onBack}>
+          <ArrowLeft size={16} />
+        </button>
+        <h2 style={{ margin: 0, color: 'var(--color-text-primary)' }}>Analytics</h2>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        {(['revenue-cost', 'timeline', 'profitability'] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              padding: '0.5rem 1rem',
-              background: tab === t ? '#1a1a2e' : '#f0f0f0',
-              color: tab === t ? '#fff' : '#333',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-            }}
-          >
-            {t === 'revenue-cost' ? 'Revenue & Cost' : t === 'timeline' ? 'Crop Timeline' : 'Profitability'}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} activeTab={tab} onTabChange={(id) => setTab(id as Tab)} />
 
-      {loading && <p>Loading analytics...</p>}
+      {loading && (
+        <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '2rem' }}>
+          Loading analytics...
+        </p>
+      )}
 
       {!loading && tab === 'revenue-cost' && analytics && (
         <RevenueCostTab analytics={analytics} />
@@ -90,28 +102,30 @@ function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
 
   return (
     <div>
-      <h3>Revenue vs Cost</h3>
+      <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '1rem' }}>Revenue vs Cost</h3>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={analytics.profitByWeek}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="week" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Line type="monotone" dataKey="revenue" stroke="#9edb66" strokeWidth={2} />
-          <Line type="monotone" dataKey="cost" stroke="#e74c3c" strokeWidth={2} />
-          <Line type="monotone" dataKey="profit" stroke="#3498db" strokeWidth={2} />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <XAxis dataKey="week" tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
+          <YAxis tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
+          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+          <Legend wrapperStyle={DARK_LEGEND_STYLE} />
+          <Line type="monotone" dataKey="revenue" stroke="var(--color-chart-1)" strokeWidth={2} />
+          <Line type="monotone" dataKey="cost" stroke="var(--color-chart-4)" strokeWidth={2} />
+          <Line type="monotone" dataKey="profit" stroke="var(--color-chart-2)" strokeWidth={2} />
         </LineChart>
       </ResponsiveContainer>
 
-      <h3 style={{ marginTop: '2rem' }}>Revenue by Crop</h3>
+      <h3 style={{ marginTop: '2rem', color: 'var(--color-text-primary)', marginBottom: '1rem' }}>
+        Revenue by Crop
+      </h3>
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={analytics.revenueByWeek}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="week" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <XAxis dataKey="week" tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
+          <YAxis tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
+          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+          <Legend wrapperStyle={DARK_LEGEND_STYLE} />
           {cropIds.map(cid => (
             <Area
               key={cid}
@@ -126,12 +140,38 @@ function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
         </AreaChart>
       </ResponsiveContainer>
 
-      <div style={{ display: 'flex', gap: '2rem', marginTop: '1.5rem', fontSize: '0.9rem' }}>
-        <div>Cumulative Revenue: <strong>${analytics.cumulativeRevenue.toFixed(2)}</strong></div>
-        <div>Cumulative Cost: <strong>${analytics.cumulativeCost.toFixed(2)}</strong></div>
-        <div>Cumulative Profit: <strong style={{ color: analytics.cumulativeProfit >= 0 ? '#27ae60' : '#e74c3c' }}>
-          ${analytics.cumulativeProfit.toFixed(2)}
-        </strong></div>
+      <div style={{
+        display: 'flex',
+        gap: '2rem',
+        marginTop: '1.5rem',
+        padding: '1rem',
+        background: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+      }}>
+        <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Cumulative Revenue
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--color-text-primary)', marginTop: '0.25rem' }}>
+            ${analytics.cumulativeRevenue.toFixed(2)}
+          </div>
+        </div>
+        <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Cumulative Cost
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--color-text-primary)', marginTop: '0.25rem' }}>
+            ${analytics.cumulativeCost.toFixed(2)}
+          </div>
+        </div>
+        <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Cumulative Profit
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '1.1rem',
+            marginTop: '0.25rem',
+            color: analytics.cumulativeProfit >= 0 ? 'var(--color-success)' : 'var(--color-error)',
+          }}>
+            ${analytics.cumulativeProfit.toFixed(2)}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -140,15 +180,24 @@ function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
 function TimelineTab({ timeline }: { timeline: TimelineData }) {
   return (
     <div>
-      <h3>Crop Timeline</h3>
-      <p style={{ color: '#666', fontSize: '0.85rem' }}>
-        Current week: {timeline.currentWeek} | Horizon: {timeline.horizonWeeks} weeks
+      <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '1rem' }}>Crop Timeline</h3>
+      <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+        Current week: <span style={{ fontFamily: 'var(--font-mono)' }}>{timeline.currentWeek}</span>
+        {' | '}Horizon: <span style={{ fontFamily: 'var(--font-mono)' }}>{timeline.horizonWeeks}</span> weeks
       </p>
       <div style={{ position: 'relative', overflowX: 'auto' }}>
         <svg width={timeline.horizonWeeks * 40 + 60} height={timeline.crops.length * 60 + 40}>
           {/* Week headers */}
           {Array.from({ length: timeline.horizonWeeks }, (_, i) => (
-            <text key={i} x={i * 40 + 60} y={15} fontSize={10} fill="#999" textAnchor="middle">
+            <text
+              key={i}
+              x={i * 40 + 60}
+              y={15}
+              fontSize={10}
+              fill="var(--color-text-secondary)"
+              textAnchor="middle"
+              fontFamily="var(--font-mono)"
+            >
               W{i + 1}
             </text>
           ))}
@@ -158,14 +207,14 @@ function TimelineTab({ timeline }: { timeline: TimelineData }) {
             x2={(timeline.currentWeek - 1) * 40 + 60}
             y1={20}
             y2={timeline.crops.length * 60 + 30}
-            stroke="#e74c3c"
+            stroke="var(--color-error)"
             strokeWidth={2}
             strokeDasharray="4 2"
           />
           {/* Crop bars */}
           {timeline.crops.map((crop, ci) => (
             <g key={crop.cropId} transform={`translate(0, ${ci * 60 + 30})`}>
-              <text x={0} y={15} fontSize={11} fill="#333">{crop.cropName}</text>
+              <text x={0} y={15} fontSize={11} fill="var(--color-text-primary)">{crop.cropName}</text>
               {crop.intervals.map((interval, ii) => (
                 <rect
                   key={ii}
@@ -187,43 +236,57 @@ function TimelineTab({ timeline }: { timeline: TimelineData }) {
 }
 
 function ProfitabilityTab({ analytics }: { analytics: AnalyticsData }) {
+  const finalMargin = analytics.profitByWeek[analytics.profitByWeek.length - 1]?.margin || 0
+
   return (
     <div>
-      <h3>Weekly Profitability</h3>
+      <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '1rem' }}>Weekly Profitability</h3>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={analytics.profitByWeek}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="week" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Bar dataKey="revenue" fill="#9edb66" name="Revenue" />
-          <Bar dataKey="cost" fill="#e74c3c" name="Cost" />
-          <Bar dataKey="profit" fill="#3498db" name="Profit" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <XAxis dataKey="week" tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
+          <YAxis tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
+          <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+          <Legend wrapperStyle={DARK_LEGEND_STYLE} />
+          <Bar dataKey="revenue" fill="var(--color-chart-1)" name="Revenue" />
+          <Bar dataKey="cost" fill="var(--color-chart-4)" name="Cost" />
+          <Bar dataKey="profit" fill="var(--color-chart-2)" name="Profit" />
         </BarChart>
       </ResponsiveContainer>
 
-      <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px' }}>
-        <h4 style={{ margin: '0 0 0.5rem' }}>Margin Trend</h4>
+      <div style={{
+        marginTop: '1.5rem',
+        padding: '1rem',
+        background: 'var(--color-bg-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-md)',
+      }}>
+        <h4 style={{ margin: '0 0 0.75rem', color: 'var(--color-text-primary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Margin Trend
+        </h4>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ flex: 1 }}>
             <div style={{
               height: '8px',
               borderRadius: '4px',
-              background: '#e0e0e0',
+              background: 'var(--color-border)',
               overflow: 'hidden',
             }}>
               <div style={{
                 height: '100%',
-                width: `${Math.max(0, analytics.profitByWeek[analytics.profitByWeek.length - 1]?.margin || 0)}%`,
-                background: '#27ae60',
+                width: `${Math.max(0, finalMargin)}%`,
+                background: 'var(--color-accent)',
                 borderRadius: '4px',
                 transition: 'width 0.3s ease',
               }} />
             </div>
           </div>
-          <span style={{ fontSize: '0.85rem', color: '#666' }}>
-            {(analytics.profitByWeek[analytics.profitByWeek.length - 1]?.margin || 0).toFixed(1)}% final margin
+          <span style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.85rem',
+            color: 'var(--color-text-secondary)',
+          }}>
+            {finalMargin.toFixed(1)}% final margin
           </span>
         </div>
       </div>
