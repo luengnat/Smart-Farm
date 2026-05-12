@@ -46,27 +46,27 @@ export function DashboardPage({
 
   if (!resolvedPlan) {
     return (
-      <div style={{ padding: 'var(--space-8)', color: 'var(--color-text-secondary)' }}>
-        No plan data available. Complete the setup wizard to generate a plan.
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-4)', padding: 'var(--space-16)', color: 'var(--color-text-secondary)' }}>
+        <p>No plan data available.</p>
+        <button className="btn btn-primary" onClick={onOpenReplan}>
+          Generate a plan
+        </button>
       </div>
     )
   }
 
   // --- Revenue computation ---
-  const pricePerKgByCrop: Record<CropId, number> = {
-    lettuce: 2.2,
-    basil: 3.8,
-    kale: 2.7,
-    mint: 3.2,
-  }
-
   const totalRevenue = useMemo(() => {
+    if (resolvedPlan.expectedRevenue > 0) return resolvedPlan.expectedRevenue
     return resolvedPlan.cropSummaries.reduce((sum, cs) => {
-      return sum + cs.targetPerWeek * pricePerKgByCrop[cs.cropId]
+      const crop = cropLibrary.find((c) => c.id === cs.cropId)
+      const price = crop?.pricePerKg ?? 0
+      return sum + cs.targetPerWeek * price
     }, 0)
-  }, [resolvedPlan.cropSummaries])
+  }, [resolvedPlan.cropSummaries, resolvedPlan.expectedRevenue])
 
   const revenuePerWeek = totalRevenue
+  const activeCrops = resolvedPlan.cropSummaries.filter((cs) => cs.allocatedCells > 0).length
 
   // --- Grid cells ---
   const gridCells = useMemo(() => {
@@ -140,8 +140,8 @@ export function DashboardPage({
         </div>
         <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
           <Metric
-            value={`$${revenuePerWeek.toFixed(0)}`}
-            label="Revenue /week"
+            value={`${activeCrops}`}
+            label="Active Crops"
           />
         </div>
         <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>

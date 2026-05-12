@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"./venv/bin/python -c \\\"\\nimport warnings; warnings.filterwarnings('ignore')\\nfrom app.database import SessionLocal\\nfrom app.core.security import hash_password\\nfrom app.models.user import...",
+  "error": "Exit code 1\n(trapped) error reading bcrypt version\nTraceback (most recent call last):\n  File \"/Users/nat/dev/Smart-Farm/.claude/worktrees/full-stack-improvements/growplan-api/venv/lib/python3.14/site-packages/passlib/handlers/bcrypt.py\", line 620, in _load_backend_mixin\n    version = _bcrypt.__about__.__version__\n              ^^^^^^^^^^^^^^^^^\nAttributeError: module 'bcrypt' has no attribute '__about__'\nTraceback (most recent call last):\n  File \"/Users/nat/dev/Smart-Farm/.claude/worktrees/full-...",
+  "timestamp": "2026-05-12T14:42:30.753Z",
+  "retry_count": 1
+}

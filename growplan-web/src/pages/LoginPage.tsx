@@ -8,10 +8,20 @@ interface LoginPageProps {
 export function LoginPage({ onLogin, onGoToRegister }: LoginPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onLogin(email, password)
+    setError(null)
+    setLoading(true)
+    try {
+      await onLogin(email, password)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Invalid email or password')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -65,8 +75,13 @@ export function LoginPage({ onLogin, onGoToRegister }: LoginPageProps) {
               required
             />
           </div>
-          <button className="btn btn-primary btn-full btn-lg" type="submit">
-            Sign in
+          {error && (
+            <p style={{ color: 'var(--color-error, #ef4444)', fontSize: 'var(--text-sm)', margin: 0 }}>
+              {error}
+            </p>
+          )}
+          <button className="btn btn-primary btn-full btn-lg" type="submit" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
         <p style={{

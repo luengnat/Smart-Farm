@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { LayoutGrid, BarChart3, Sprout, Clock, Settings, LogOut, ListChecks } from 'lucide-react'
+import { LayoutGrid, BarChart3, Sprout, Clock, LogOut, ListChecks } from 'lucide-react'
 
-type ShellPage = 'dashboard' | 'analytics' | 'crop-comparison' | 'plan-history' | 'tasks' | 'settings'
+type ShellPage = 'dashboard' | 'analytics' | 'crop-comparison' | 'plan-history' | 'tasks'
 
 interface NavItem {
   id: ShellPage
@@ -15,7 +15,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'crop-comparison', icon: <Sprout size={20} />, label: 'Crops' },
   { id: 'plan-history', icon: <Clock size={20} />, label: 'History' },
   { id: 'tasks', icon: <ListChecks size={20} />, label: 'Tasks' },
-  { id: 'settings', icon: <Settings size={20} />, label: 'Settings' },
 ]
 
 interface AppShellProps {

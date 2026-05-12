@@ -1,0 +1,71 @@
+{
+  "agents": [
+    {
+      "agent_id": "a3f385b5bc402ddcc",
+      "agent_type": "general-purpose",
+      "started_at": "2026-05-12T05:35:45.345Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T05:36:22.104Z",
+      "duration_ms": 36759
+    },
+    {
+      "agent_id": "a7d813117d75907fa",
+      "agent_type": "code",
+      "started_at": "2026-05-12T05:40:27.494Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T05:45:16.508Z",
+      "duration_ms": 289014
+    },
+    {
+      "agent_id": "a52aff15b240fb7ea",
+      "agent_type": "code-reviewer",
+      "started_at": "2026-05-12T05:46:04.702Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T05:46:52.583Z",
+      "duration_ms": 47881
+    },
+    {
+      "agent_id": "ac763b11c7d2dc220",
+      "agent_type": "typescript-reviewer",
+      "started_at": "2026-05-12T05:47:36.632Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T05:48:09.948Z",
+      "duration_ms": 33316
+    },
+    {
+      "agent_id": "a1fd85d8201b830c5",
+      "agent_type": "oh-my-claudecode:code-reviewer",
+      "started_at": "2026-05-12T15:02:57.278Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T15:09:04.261Z",
+      "duration_ms": 366983
+    },
+    {
+      "agent_id": "a667a2b848c27a989",
+      "agent_type": "code",
+      "started_at": "2026-05-12T15:19:33.364Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T15:21:28.389Z",
+      "duration_ms": 115025
+    },
+    {
+      "agent_id": "a49bc3b3f92eae47b",
+      "agent_type": "code",
+      "started_at": "2026-05-12T15:22:03.525Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-05-12T15:23:50.381Z",
+      "duration_ms": 106856
+    }
+  ],
+  "total_spawned": 7,
+  "total_completed": 7,
+  "total_failed": 0,
+  "last_updated": "2026-05-12T15:23:50.484Z"
+}

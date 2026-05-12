@@ -1,0 +1,292 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1778564286346,
+  "projectRoot": "/Users/nat/dev/Smart-Farm/.claude/worktrees/full-stack-improvements/growplan-web",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "19.2.5",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.2.5",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "8.0.10",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "cd ../growplan-web && npx tsc --noEmit 2>&1 | tail -20",
+    "testCommand": null,
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc -b && vite build",
+      "lint": "eslint .",
+      "preview": "vite preview"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "public",
+      "src"
+    ],
+    "gitBranches": {
+      "defaultBranch": "master",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 2,
+      "lastAccessed": 1778564286338,
+      "keyFiles": [
+        "favicon.svg",
+        "icons.svg"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 4,
+      "lastAccessed": 1778564286339,
+      "keyFiles": [
+        "App.css",
+        "App.tsx",
+        "index.css",
+        "main.tsx"
+      ]
+    },
+    "src/assets": {
+      "path": "src/assets",
+      "purpose": "Static assets",
+      "fileCount": 4,
+      "lastAccessed": 1778564286341,
+      "keyFiles": [
+        "dashboard.png",
+        "hero.png",
+        "react.svg"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 3,
+      "lastAccessed": 1778564286341,
+      "keyFiles": [
+        "AppHeader.tsx",
+        "SetupProgress.tsx",
+        "StepActions.tsx"
+      ]
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 2,
+      "lastAccessed": 1778564286341,
+      "keyFiles": [
+        "api.ts",
+        "planGenerator.ts"
+      ]
+    },
+    "src/pages": {
+      "path": "src/pages",
+      "purpose": "Page components",
+      "fileCount": 12,
+      "lastAccessed": 1778564286342,
+      "keyFiles": [
+        "AnalyticsPage.tsx",
+        "ConfirmPlanPage.tsx",
+        "CropComparisonPage.tsx"
+      ]
+    },
+    "src/types": {
+      "path": "src/types",
+      "purpose": "Type definitions",
+      "fileCount": 1,
+      "lastAccessed": 1778564286342,
+      "keyFiles": [
+        "planning.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/App.tsx",
+      "accessCount": 28,
+      "lastAccessed": 1778598950552,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/api.ts",
+      "accessCount": 23,
+      "lastAccessed": 1778599569401,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/DashboardPage.tsx",
+      "accessCount": 14,
+      "lastAccessed": 1778598797338,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/DefineGoalPage.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1778598214957,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppShell.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1778598610646,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/ConfirmPlanPage.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1778599450456,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/ReplanPage.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1778598231994,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/RegisterPage.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1778599260007,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/LoginPage.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1778599260084,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/GeneratePlanPage.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1778598214968,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/AnalyticsPage.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1778599386443,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/TasksPage.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1778599388296,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/CropComparisonPage.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1778599386997,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/PlanHistoryPage.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1778599387528,
+      "type": "file"
+    },
+    {
+      "path": "src/contexts/AuthContext.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1778598259221,
+      "type": "file"
+    },
+    {
+      "path": "tsconfig.json",
+      "accessCount": 1,
+      "lastAccessed": 1778564636329,
+      "type": "file"
+    },
+    {
+      "path": "tsconfig.app.json",
+      "accessCount": 1,
+      "lastAccessed": 1778564643276,
+      "type": "file"
+    },
+    {
+      "path": "src/types/auth.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778578005072,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/SelectCropsPage.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778598214985,
+      "type": "file"
+    },
+    {
+      "path": "src/pages/SetupFarmPage.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778598215525,
+      "type": "file"
+    },
+    {
+      "path": "src/types/planning.ts",
+      "accessCount": 1,
+      "lastAccessed": 1778598259338,
+      "type": "file"
+    },
+    {
+      "path": "src/components/TabBar.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778598273475,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Metric.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1778598273529,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

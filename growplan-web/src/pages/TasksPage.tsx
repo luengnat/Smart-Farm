@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { fetchActions, completeAction, advanceWeek, type ActionItem } from '../lib/api'
 import { cropLibrary } from '../constants/crops'
+import toast from 'react-hot-toast'
 
 type Props = {
   planId: number | null
@@ -161,6 +162,7 @@ export function TasksPage({ planId, onBack }: Props) {
   const toggleMutation = useMutation({
     mutationFn: (actionId: number) => completeAction(planId!, actionId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['actions', planId] }),
+    onError: () => toast.error('Failed to update task'),
   })
 
   const advanceMutation = useMutation({
@@ -169,7 +171,10 @@ export function TasksPage({ planId, onBack }: Props) {
       queryClient.invalidateQueries({ queryKey: ['actions', planId] })
       setAdvancing(false)
     },
-    onError: () => setAdvancing(false),
+    onError: () => {
+      setAdvancing(false)
+      toast.error('Failed to advance week')
+    },
   })
 
   const actions = data?.actions ?? []

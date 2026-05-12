@@ -1,5 +1,5 @@
 import toast from 'react-hot-toast'
-import type { CropId } from '../constants/crops'
+import { cropLibrary, type CropId } from '../constants/crops'
 import type {
   AnalyticsData,
   CropComparisonData,
@@ -100,15 +100,86 @@ async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
   const rows = data.rows ?? 0
   const columns = data.columns ?? 0
   const totalGrids = rows * columns
-  const cells = (data.cells ?? []).map((c: Record<string, any>) => ({
-    cropId: c.cropId ?? '',
-    color: '',
-    label: c.cropId ?? '',
-  }))
+  const rawCells = data.cells ?? []
+  const cells = rawCells.map((c: Record<string, any>) => {
+    const crop = cropLibrary.find((cr) => cr.id === c.cropId)
+    return {
+      cropId: c.cropId ?? '',
+      color: crop?.accent ?? '#6b7280',
+      label: crop?.name ?? c.cropId ?? '',
+    }
+  })
   const allocations = data.allocations ?? []
   const totalAllocated = allocations.reduce((sum: number, a: Record<string, any>) => sum + (a.gridsAllocated ?? 0), 0)
   const revenue = data.revenue
   const totalRevenue = revenue?.totalPerWeek ?? revenue?.totalRevenuePerWeek ?? 0
+
+  // Compute timeline rows from cell data
+  const cropTimelines = new Map<string, { minWeek: number; maxHarvest: number; count: number }>()
+  for (const c of rawCells) {
+    const cid = c.cropId as string
+    const ws = c.weekStarted as number
+    const wh = c.weekHarvestExpected as number
+    const existing = cropTimelines.get(cid)
+    if (!existing) {
+      cropTimelines.set(cid, { minWeek: ws, maxHarvest: wh, count: 1 })
+    } else {
+      existing.minWeek = Math.min(existing.minWeek, ws)
+      existing.maxHarvest = Math.max(existing.maxHarvest, wh)
+      existing.count++
+    }
+  }
+
+  const timelineRows = Array.from(cropTimelines.entries()).map(([cropId, tl]) => {
+    const crop = cropLibrary.find((cr) => cr.id === cropId)
+    const growWeeks = tl.maxHarvest - tl.minWeek
+    const seedWeek = Math.max(1, tl.minWeek - (crop?.nurseryLeadWeeks ?? 2))
+    return {
+      cropId: cropId as CropId,
+      label: crop?.name ?? cropId,
+      color: crop?.accent ?? '#6b7280',
+      seedWeek,
+      transplantWeek: tl.minWeek,
+      growWeeks: growWeeks > 0 ? growWeeks : 4,
+      harvestWeek: tl.maxHarvest,
+    }
+  })
+
+  // Compute nursery schedule from timeline
+  const nurserySchedule = timelineRows.map((tr) => {
+    const crop = cropLibrary.find((cr) => cr.id === tr.cropId)
+    const alloc = allocations.find((a: Record<string, any>) => a.cropId === tr.cropId)
+    const seedlings = (alloc?.gridsAllocated ?? 0) * (crop?.seedlingsPerGrid ?? 6)
+    return {
+      cropId: tr.cropId,
+      label: tr.label,
+      color: tr.color,
+      seedWeek: tr.seedWeek,
+      transplantWeek: tr.transplantWeek,
+      seedlings,
+      status: 'Scheduled' as const,
+    }
+  })
+
+  const nurseryCapacity = (data.nurseryTrayCount ?? 2) * (data.nurseryTrayCells ?? 200)
+  const horizonWeeks = data.horizonWeeks ?? 8
+  const nurseryLoad = Array.from({ length: horizonWeeks }, (_, i) => {
+    const week = i + 1
+    let active = 0
+    for (const batch of nurserySchedule) {
+      if (week >= batch.seedWeek && week < batch.transplantWeek) {
+        active += batch.seedlings
+      }
+    }
+    const pct = nurseryCapacity > 0 ? Math.round((active / nurseryCapacity) * 100) : 0
+    return {
+      week,
+      activeSeedlings: active,
+      capacity: nurseryCapacity,
+      utilizationPercent: pct,
+      risk: (pct > 90 ? 'High' : pct > 70 ? 'Medium' : 'Low') as 'Low' | 'Medium' | 'High',
+    }
+  })
 
   return {
     rows,
@@ -118,20 +189,23 @@ async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
     requiredCapacity: totalAllocated,
     availableCapacity: totalGrids,
     stockoutRisk: 'Low' as const,
-    seedlingCapacityRisk: 'Low' as const,
+    seedlingCapacityRisk: nurseryLoad.some(w => w.risk === 'High') ? 'High' : nurseryLoad.some(w => w.risk === 'Medium') ? 'Medium' : 'Low' as const,
     expectedRevenue: totalRevenue,
-    cropSummaries: allocations.map((a: Record<string, any>) => ({
-      cropId: a.cropId,
-      label: a.cropId,
-      color: '',
-      allocatedCells: a.gridsAllocated,
-      targetPerWeek: 0,
-      reservePercent: 0,
-      seedlingsPerWeek: 0,
-    })),
-    timelineRows: [],
-    nurserySchedule: [],
-    nurseryLoad: [],
+    cropSummaries: allocations.map((a: Record<string, any>) => {
+      const crop = cropLibrary.find((cr) => cr.id === a.cropId)
+      return {
+        cropId: a.cropId,
+        label: crop?.name ?? a.cropId,
+        color: crop?.accent ?? '#6b7280',
+        allocatedCells: a.gridsAllocated,
+        targetPerWeek: 0,
+        reservePercent: 0,
+        seedlingsPerWeek: crop ? a.gridsAllocated * crop.seedlingsPerGrid : 0,
+      }
+    }),
+    timelineRows,
+    nurserySchedule,
+    nurseryLoad,
   }
 }
 
