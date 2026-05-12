@@ -12,7 +12,9 @@ import type {
   TimelineData,
 } from '../types/planning'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.PROD
+  ? '/api'
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 const API_KEY = import.meta.env.VITE_API_KEY || 'dev-key-change-in-production'
 
 let backendAvailable = true
