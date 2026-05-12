@@ -2,9 +2,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.farms import router as farms_router
+from app.api.crops import router as crops_router
 from app.config import settings
 
 app = FastAPI(title="GrowPlan API", version="1.0.0")
+
+app.include_router(farms_router)
+app.include_router(crops_router)
 
 app.add_middleware(
     CORSMiddleware,
