@@ -10,6 +10,7 @@ type DashboardPageProps = {
   generatedPlan: GeneratedPlanData | null
   onBackToConfirm: () => void
   onOpenReplan: () => void
+  onSetupFarm: () => void
 }
 
 const SURFACE: React.CSSProperties = {
@@ -36,6 +37,7 @@ export function DashboardPage({
   generatedPlan,
   onBackToConfirm,
   onOpenReplan,
+  onSetupFarm,
 }: DashboardPageProps) {
   const selectedCrops = useMemo(
     () => cropLibrary.filter((crop) => selectedCropIds.includes(crop.id)),
@@ -48,7 +50,7 @@ export function DashboardPage({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-4)', padding: 'var(--space-16)', color: 'var(--color-text-secondary)' }}>
         <p>No plan data available.</p>
-        <button className="btn btn-primary" onClick={onOpenReplan}>
+        <button className="btn btn-primary" onClick={onSetupFarm}>
           Generate a plan
         </button>
       </div>

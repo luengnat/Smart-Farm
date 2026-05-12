@@ -307,3 +307,9 @@ export async function advanceWeek(planId: number): Promise<{ currentWeek: number
     method: 'POST',
   })
 }
+
+export async function confirmPlan(planId: number): Promise<{ id: number; status: string }> {
+  return apiFetch<{ id: number; status: string }>(`/plans/${planId}/confirm`, {
+    method: 'POST',
+  })
+}
