@@ -10,8 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.disruption import Disruption
 from app.models.farm import Farm
+from app.models.nursery import NurseryBatch
 from app.models.plan import Allocation, GridCell, Plan
+from app.schemas.disruption import DisruptionRequest
 from app.schemas.plan import (
     AllocationResponse,
     GridCellResponse,
@@ -21,6 +24,7 @@ from app.schemas.plan import (
     PlanStatusResponse,
     RevenueResponse,
 )
+from app.services.nursery import build_occupancy
 from app.workers.solver_worker import run_solver
 
 router = APIRouter(prefix="/plans", tags=["plans"])
@@ -150,3 +154,116 @@ def confirm_plan(plan_id: int, db: Session = Depends(get_db)):
     plan.status = "confirmed"
     db.commit()
     return {"status": "confirmed", "plan_id": plan.id}
+
+
+@router.post("/{plan_id}/advance-week")
+def advance_week(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if plan.status != "confirmed":
+        raise HTTPException(
+            status_code=400, detail="Can only advance confirmed plans"
+        )
+    plan.current_week += 1
+    db.commit()
+    return {"current_week": plan.current_week}
+
+
+@router.post("/{plan_id}/disrupt")
+def create_disruption(
+    plan_id: int,
+    req: DisruptionRequest,
+    db: Session = Depends(get_db),
+):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    disruption = Disruption(
+        plan_id=plan_id,
+        type=req.type,
+        grid_indexes=req.grid_indexes,
+        crop_id=req.crop_id,
+        week=req.week,
+        description=req.description,
+    )
+    db.add(disruption)
+    plan.status = "disrupted"
+    db.commit()
+    return {"id": disruption.id, "status": "disrupted"}
+
+
+@router.post("/{plan_id}/replan")
+def replan_endpoint(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    disruption = (
+        db.query(Disruption)
+        .filter(Disruption.plan_id == plan_id)
+        .order_by(Disruption.id.desc())
+        .first()
+    )
+    if not disruption:
+        raise HTTPException(
+            status_code=400, detail="No disruption found for this plan"
+        )
+    from app.services.replanner import replan as do_replan
+
+    result = do_replan(plan_id, disruption, db)
+    return result
+
+
+@router.get("/{plan_id}/actions")
+def get_actions(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    from app.services.actions import generate_action_queue
+
+    actions = generate_action_queue(plan, plan.current_week, db)
+    return {"actions": actions}
+
+
+@router.get("/{plan_id}/nursery")
+def get_nursery(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
+    batches = (
+        db.query(NurseryBatch)
+        .filter(NurseryBatch.plan_id == plan_id)
+        .all()
+    )
+    batch_dicts = [
+        {
+            "id": b.id,
+            "crop_id": b.crop_id,
+            "seed_week": b.seed_week,
+            "transplant_week": b.transplant_week,
+            "seedling_count": b.seedling_count,
+            "tray_count": b.tray_count,
+            "status": b.status,
+        }
+        for b in batches
+    ]
+    occupancy = build_occupancy(
+        batch_dicts, farm.nursery_tray_count, plan.horizon_weeks
+    )
+    return {
+        "plan_id": plan_id,
+        "occupancy": occupancy,
+        "batches": [
+            {
+                "id": b.id,
+                "crop_id": b.crop_id,
+                "seed_week": b.seed_week,
+                "transplant_week": b.transplant_week,
+                "seedling_count": b.seedling_count,
+                "tray_count": b.tray_count,
+                "status": b.status,
+            }
+            for b in batches
+        ],
+    }
