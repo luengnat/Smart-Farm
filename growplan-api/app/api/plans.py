@@ -225,6 +225,69 @@ def get_actions(plan_id: int, db: Session = Depends(get_db)):
     return {"actions": actions}
 
 
+@router.get("/{plan_id}/costs")
+def get_costs(plan_id: int, db: Session = Depends(get_db)):
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    farm = db.query(Farm).filter(Farm.id == plan.farm_id).first()
+    allocations = (
+        db.query(Allocation).filter(Allocation.plan_id == plan_id).all()
+    )
+    from app.models.crop import Crop as CropModel
+
+    crops = (
+        db.query(CropModel)
+        .filter(CropModel.id.in_(plan.selected_crops))
+        .all()
+    )
+
+    from app.services.actions import generate_action_queue
+    from app.services.cost import calculate_weekly_costs
+
+    actions = generate_action_queue(plan, plan.current_week, db)
+    action_inputs = [
+        {
+            "type": a["type"],
+            "minutes_per_grid": 8,
+            "grids": len(a.get("grid_indexes", [1])),
+        }
+        for a in actions
+    ]
+
+    alloc_inputs = [
+        {"crop_id": a.crop_id, "grids_allocated": a.grids_allocated}
+        for a in allocations
+    ]
+    crop_inputs = [
+        {
+            "id": c.id,
+            "seedlings_per_grid": c.seedlings_per_grid,
+            "nutrient_cost_per_grid_week": c.nutrient_cost_per_grid_week,
+            "cost_per_seedling": c.cost_per_seedling,
+            "weeks_on_panel": c.weeks_on_panel,
+        }
+        for c in crops
+    ]
+    farm_config = {
+        "nursery_tray_count": farm.nursery_tray_count if farm else 30,
+        "hourly_rate": 15.0,
+        "base_energy_weekly": 20.0,
+        "energy_per_grid": 0.50,
+        "energy_per_tray": 0.10,
+    }
+
+    result = calculate_weekly_costs(
+        actions=action_inputs,
+        allocations=alloc_inputs,
+        farm_config=farm_config,
+        crops=crop_inputs,
+        revenue_per_week=plan.revenue_total or 0,
+    )
+    return result
+
+
 @router.get("/{plan_id}/nursery")
 def get_nursery(plan_id: int, db: Session = Depends(get_db)):
     plan = db.query(Plan).filter(Plan.id == plan_id).first()
