@@ -130,6 +130,14 @@ def generate_plan(
     if not farm:
         raise HTTPException(status_code=404, detail="Farm not found")
 
+    membership = (
+        db.query(FarmMember)
+        .filter(FarmMember.user_id == current_user.id, FarmMember.farm_id == req.farm_id)
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=403, detail="No access to this farm")
+
     commitments_raw = req.goal.commitments
     commitments_data = {
         k: v.model_dump() for k, v in commitments_raw.items()
