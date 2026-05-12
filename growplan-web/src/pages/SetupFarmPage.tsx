@@ -1,17 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import {
   Droplet,
   Grid3X3,
   Lightbulb,
-  Plus,
   RotateCcw,
   Settings2,
   Waves,
 } from 'lucide-react'
-import { AppHeader } from '../components/AppHeader'
-import { SetupProgress } from '../components/SetupProgress'
-import { StepActions } from '../components/StepActions'
-import { setupSteps } from '../constants/setupSteps'
 import type { SetupFarmData } from '../types/planning'
 
 type SetupFarmPageProps = {
@@ -40,6 +35,49 @@ const createDefaultIrrigationAssignments = (
     const colIndex = idx % columns
     return Math.min(irrigationZones, Math.floor((colIndex * irrigationZones) / columns) + 1)
   })
+}
+
+const ZONE_COLORS = [
+  'rgba(0, 230, 118, 0.25)',
+  'rgba(64, 196, 255, 0.25)',
+  'rgba(255, 179, 0, 0.25)',
+  'rgba(255, 82, 82, 0.25)',
+  'rgba(179, 136, 255, 0.25)',
+]
+
+const ZONE_BORDERS = [
+  'rgba(0, 230, 118, 0.5)',
+  'rgba(64, 196, 255, 0.5)',
+  'rgba(255, 179, 0, 0.5)',
+  'rgba(255, 82, 82, 0.5)',
+  'rgba(179, 136, 255, 0.5)',
+]
+
+const IZ_COLORS = [
+  'rgba(64, 196, 255, 0.6)',
+  'rgba(255, 179, 0, 0.6)',
+  'rgba(179, 136, 255, 0.6)',
+]
+
+/* ── inline style helpers ── */
+
+const sectionHeading: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 'var(--space-3)',
+  marginBottom: 'var(--space-4)',
+  paddingBottom: 'var(--space-3)',
+  borderBottom: '1px solid var(--color-border)',
+}
+
+const twoColGrid: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: 'var(--space-4)',
+}
+
+const mono: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
 }
 
 export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: SetupFarmPageProps) {
@@ -109,17 +147,14 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
   }, [irrigationZones])
 
   const lightingLegend = Array.from({ length: lightingZones }, (_, idx) => idx + 1)
-
   const irrigationLegend = Array.from({ length: irrigationZones }, (_, idx) => idx + 1)
 
   const dragRect = useMemo(() => {
     if (dragStartIdx === null || dragCurrentIdx === null) return null
-
     const startRow = Math.floor(dragStartIdx / columns)
     const startCol = dragStartIdx % columns
     const endRow = Math.floor(dragCurrentIdx / columns)
     const endCol = dragCurrentIdx % columns
-
     return {
       minRow: Math.min(startRow, endRow),
       maxRow: Math.max(startRow, endRow),
@@ -133,25 +168,21 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
     const startCol = startIdx % columns
     const endRow = Math.floor(endIdx / columns)
     const endCol = endIdx % columns
-
     const minRow = Math.min(startRow, endRow)
     const maxRow = Math.max(startRow, endRow)
     const minCol = Math.min(startCol, endCol)
     const maxCol = Math.max(startCol, endCol)
-
     const inSelection = (idx: number) => {
       const row = Math.floor(idx / columns)
       const col = idx % columns
       return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol
     }
-
     if (activeTool === 'lighting') {
       setLightingAssignments((prev) =>
         prev.map((zone, idx) => (inSelection(idx) ? activeLightingZone : zone)),
       )
       return
     }
-
     setIrrigationAssignments((prev) =>
       prev.map((zone, idx) => (inSelection(idx) ? activeIrrigationZone : zone)),
     )
@@ -211,289 +242,523 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
     })
   }
 
-  const accountInitials = farmName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-    .slice(0, 2) || 'GF'
-
   return (
-    <main className="setup-page">
-      <AppHeader accountName={farmName} accountInitials={accountInitials} />
+    <main
+      style={{
+        minHeight: '100vh',
+        background: 'var(--color-bg-base)',
+        color: 'var(--color-text-primary)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Progress indicator */}
+      <div
+        style={{
+          padding: 'var(--space-3) var(--space-6)',
+          borderBottom: '1px solid var(--color-border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-text-muted)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
+        >
+          Step 1 of 3 &mdash; Farm Setup
+        </span>
+        <span
+          style={{
+            fontSize: 'var(--text-xs)',
+            color: 'var(--color-text-muted)',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {totalGrids} grids
+        </span>
+      </div>
 
-      <section className="setup-workspace">
-        <SetupProgress activeStep={1} steps={setupSteps} />
+      {/* Two-panel layout */}
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: '380px 1fr',
+          gap: 0,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Left: Form panel */}
+        <section
+          style={{
+            padding: 'var(--space-6)',
+            borderRight: '1px solid var(--color-border)',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-6)',
+          }}
+        >
+          {/* Header */}
+          <div>
+            <h1
+              style={{
+                fontSize: 'var(--text-xl)',
+                fontWeight: 600,
+                marginBottom: 'var(--space-1)',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              Setup Farm
+            </h1>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+              Configure your controlled-environment farm layout.
+            </p>
+          </div>
 
-        <section className="setup-main">
-          <section className="setup-form-card">
-            <h1>Setup Farm</h1>
-            <p>Start by configuring your controlled-environment farm layout.</p>
+          {/* Identity fields */}
+          <div className="input-group">
+            <label className="input-label" htmlFor="farm-name">Farm name</label>
+            <input
+              id="farm-name"
+              className="input-field"
+              value={farmName}
+              placeholder="Enter farm name"
+              onChange={(e) => setFarmName(e.target.value)}
+            />
+          </div>
+          <div className="input-group">
+            <label className="input-label" htmlFor="farm-location">Farm location</label>
+            <input
+              id="farm-location"
+              className="input-field"
+              value={farmLocation}
+              placeholder="Enter location"
+              onChange={(e) => setFarmLocation(e.target.value)}
+            />
+          </div>
 
-            <div className="field-grid two-columns">
-              <label>
-                Farm name
-                <input value={farmName} onChange={(e) => setFarmName(e.target.value)} />
-              </label>
-              <label>
-                Farm location
-                <input value={farmLocation} onChange={(e) => setFarmLocation(e.target.value)} />
-              </label>
-            </div>
-
-            <div className="section-title">
-              <span className="section-icon" aria-hidden="true">
-                <Grid3X3 size={18} />
-              </span>
-              <div>
-                <h2>Farm Layout</h2>
-                <p>Define the size and structure of your growing area.</p>
+          {/* Farm Layout */}
+          <div style={sectionHeading}>
+            <Grid3X3 size={16} style={{ color: 'var(--color-text-muted)' }} />
+            <div>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Farm Layout</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                Define the size and structure of your growing area.
               </div>
             </div>
+          </div>
 
-            <div className="field-grid two-columns">
-              <label>
-                Total grids
-                <input value={totalGrids} readOnly />
-              </label>
-              <span className="field-spacer"></span>
-              <label>
-                Rows
-                <input
-                  type="number"
-                  min={4}
-                  max={20}
-                  value={rows}
-                  onChange={(e) => setRows(Number(e.target.value) || 4)}
-                />
-              </label>
-              <label>
-                Columns
-                <input
-                  type="number"
-                  min={4}
-                  max={20}
-                  value={columns}
-                  onChange={(e) => setColumns(Number(e.target.value) || 4)}
-                />
-              </label>
+          <div style={twoColGrid}>
+            <div className="input-group">
+              <label className="input-label" htmlFor="rows">Rows</label>
+              <input
+                id="rows"
+                className="input-field mono"
+                type="number"
+                min={4}
+                max={20}
+                value={rows}
+                onChange={(e) => setRows(Number(e.target.value) || 4)}
+              />
             </div>
+            <div className="input-group">
+              <label className="input-label" htmlFor="columns">Columns</label>
+              <input
+                id="columns"
+                className="input-field mono"
+                type="number"
+                min={4}
+                max={20}
+                value={columns}
+                onChange={(e) => setColumns(Number(e.target.value) || 4)}
+              />
+            </div>
+          </div>
 
-            <div className="section-title">
-              <span className="section-icon" aria-hidden="true">
-                <Settings2 size={18} />
-              </span>
-              <div>
-                <h2>Controlled Environment</h2>
-                <p>Configure your lighting and irrigation zones.</p>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+              padding: 'var(--space-2) var(--space-3)',
+              background: 'var(--color-bg-elevated)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Total grids
+            </span>
+            <span style={{ ...mono, fontSize: 'var(--text-sm)', color: 'var(--color-accent)', fontWeight: 600 }}>
+              {totalGrids}
+            </span>
+          </div>
+
+          {/* Controlled Environment */}
+          <div style={sectionHeading}>
+            <Settings2 size={16} style={{ color: 'var(--color-text-muted)' }} />
+            <div>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Controlled Environment</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                Configure lighting and irrigation zones.
               </div>
             </div>
+          </div>
 
-            <div className="field-grid two-columns">
-              <label>
-                Lighting zones
-                <select
-                  value={lightingZones}
-                  onChange={(e) => setLightingZones(Number(e.target.value))}
-                >
-                  <option value={2}>2 zones</option>
-                  <option value={3}>3 zones</option>
-                  <option value={4}>4 zones</option>
-                </select>
-              </label>
-              <label>
-                Irrigation zones
-                <select
-                  value={irrigationZones}
-                  onChange={(e) => setIrrigationZones(Number(e.target.value))}
-                >
-                  <option value={1}>1 zone</option>
-                  <option value={2}>2 zones</option>
-                  <option value={3}>3 zones</option>
-                </select>
-              </label>
-              <label className="full-width">
-                Growing system
-                <select
-                  value={growingSystem}
-                  onChange={(e) => setGrowingSystem(e.target.value)}
-                >
-                  <option>Hydroponic NFT</option>
-                  <option>Hydroponic DWC</option>
-                  <option>Aeroponic</option>
-                  <option>Container garden</option>
-                </select>
-              </label>
-              <label>
-                Nursery capacity (seedlings)
-                <input
-                  type="number"
-                  min={20}
-                  max={2000}
-                  value={nurseryCapacity}
-                  onChange={(e) => setNurseryCapacity(Math.max(20, Number(e.target.value) || 20))}
-                />
-              </label>
-              <label>
-                Seedling lead time (days)
-                <input
-                  type="number"
-                  min={7}
-                  max={35}
-                  value={seedlingLeadDays}
-                  onChange={(e) => setSeedlingLeadDays(Math.max(7, Number(e.target.value) || 7))}
-                />
-              </label>
+          <div style={twoColGrid}>
+            <div className="input-group">
+              <label className="input-label" htmlFor="lighting-zones">Lighting zones</label>
+              <select
+                id="lighting-zones"
+                className="input-field"
+                value={lightingZones}
+                onChange={(e) => setLightingZones(Number(e.target.value))}
+              >
+                <option value={2}>2 zones</option>
+                <option value={3}>3 zones</option>
+                <option value={4}>4 zones</option>
+              </select>
             </div>
-          </section>
+            <div className="input-group">
+              <label className="input-label" htmlFor="irrigation-zones">Irrigation zones</label>
+              <select
+                id="irrigation-zones"
+                className="input-field"
+                value={irrigationZones}
+                onChange={(e) => setIrrigationZones(Number(e.target.value))}
+              >
+                <option value={1}>1 zone</option>
+                <option value={2}>2 zones</option>
+                <option value={3}>3 zones</option>
+              </select>
+            </div>
+          </div>
 
-          <section className="setup-preview-card">
-            <header>
-              <div>
-                <h2>Farm Layout Preview</h2>
-                <p>
-                  {rows} rows x {columns} columns ({totalGrids} total grids)
-                </p>
-              </div>
-              <div className="preview-actions">
-                <button
-                  type="button"
-                  className={`ghost-btn ${activeTool === 'lighting' ? 'active' : ''}`}
-                  onClick={() => setActiveTool('lighting')}
-                >
-                  <Plus size={14} />
-                  <Lightbulb size={14} />
-                  Add Lighting Zone
-                </button>
-                <button
-                  type="button"
-                  className={`ghost-btn ${activeTool === 'irrigation' ? 'active' : ''}`}
-                  onClick={() => setActiveTool('irrigation')}
-                >
-                  <Plus size={14} />
-                  <Droplet size={14} />
-                  Add Irrigation Zone
-                </button>
-                <button type="button" className="ghost-btn" onClick={resetZones}>
-                  <RotateCcw size={16} />
-                  Reset
-                </button>
-              </div>
-            </header>
+          <div className="input-group">
+            <label className="input-label" htmlFor="growing-system">Growing system</label>
+            <select
+              id="growing-system"
+              className="input-field"
+              value={growingSystem}
+              onChange={(e) => setGrowingSystem(e.target.value)}
+            >
+              <option>Hydroponic NFT</option>
+              <option>Hydroponic DWC</option>
+              <option>Aeroponic</option>
+              <option>Container garden</option>
+            </select>
+          </div>
 
-            <div className="zone-assignment-bar">
-              {activeTool === 'lighting' ? (
-                <>
-                  <span>Assign to lighting zone:</span>
-                  <select
-                    value={activeLightingZone}
-                    onChange={(e) => setActiveLightingZone(Number(e.target.value))}
+          <div style={twoColGrid}>
+            <div className="input-group">
+              <label className="input-label" htmlFor="nursery-capacity">Nursery capacity (seedlings)</label>
+              <input
+                id="nursery-capacity"
+                className="input-field mono"
+                type="number"
+                min={20}
+                max={2000}
+                value={nurseryCapacity}
+                onChange={(e) => setNurseryCapacity(Math.max(20, Number(e.target.value) || 20))}
+              />
+            </div>
+            <div className="input-group">
+              <label className="input-label" htmlFor="seedling-lead">Seedling lead time (days)</label>
+              <input
+                id="seedling-lead"
+                className="input-field mono"
+                type="number"
+                min={7}
+                max={35}
+                value={seedlingLeadDays}
+                onChange={(e) => setSeedlingLeadDays(Math.max(7, Number(e.target.value) || 7))}
+              />
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'auto', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
+            <button type="button" className="btn btn-ghost" onClick={onBackToWelcome}>
+              Back
+            </button>
+            <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={handleContinue}>
+              Save &amp; Continue
+            </button>
+          </div>
+        </section>
+
+        {/* Right: Preview + zone assignment */}
+        <section
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Preview header */}
+          <header
+            style={{
+              padding: 'var(--space-4) var(--space-6)',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 'var(--space-3)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Farm Layout Preview</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', ...mono }}>
+                {rows} x {columns} &middot; {totalGrids} grids
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{
+                  ...(activeTool === 'lighting' ? {
+                    color: 'var(--color-accent)',
+                    background: 'var(--color-accent-bg)',
+                  } : {}),
+                }}
+                onClick={() => setActiveTool('lighting')}
+              >
+                <Lightbulb size={14} />
+                Lighting
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{
+                  ...(activeTool === 'irrigation' ? {
+                    color: 'var(--color-info)',
+                    background: 'rgba(64, 196, 255, 0.08)',
+                  } : {}),
+                }}
+                onClick={() => setActiveTool('irrigation')}
+              >
+                <Droplet size={14} />
+                Irrigation
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={resetZones}>
+                <RotateCcw size={14} />
+                Reset
+              </button>
+            </div>
+          </header>
+
+          {/* Zone selector bar */}
+          <div
+            style={{
+              padding: 'var(--space-2) var(--space-6)',
+              borderBottom: '1px solid var(--color-border)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+              background: 'var(--color-bg-surface)',
+            }}
+          >
+            <span
+              style={{
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              {activeTool === 'lighting' ? 'Assign to lighting zone:' : 'Assign to irrigation zone:'}
+            </span>
+            <select
+              className="input-field"
+              style={{ width: 'auto', padding: 'var(--space-1) var(--space-3)', fontSize: 'var(--text-xs)', ...mono }}
+              value={activeTool === 'lighting' ? activeLightingZone : activeIrrigationZone}
+              onChange={(e) => {
+                const val = Number(e.target.value)
+                if (activeTool === 'lighting') setActiveLightingZone(val)
+                else setActiveIrrigationZone(val)
+              }}
+            >
+              {(activeTool === 'lighting' ? lightingLegend : irrigationLegend).map((zone) => (
+                <option key={zone} value={zone}>
+                  {activeTool === 'lighting' ? 'LZ' : 'IZ'} {zone}
+                </option>
+              ))}
+            </select>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+              Drag to paint zones
+            </span>
+          </div>
+
+          {/* Grid canvas */}
+          <div
+            style={{
+              flex: 1,
+              padding: 'var(--space-6)',
+              overflow: 'auto',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'center',
+            }}
+            onPointerUp={finalizeDrag}
+            onPointerLeave={finalizeDrag}
+          >
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                gridTemplateRows: `repeat(${rows}, 1fr)`,
+                gap: '2px',
+                width: '100%',
+                maxWidth: `${columns * 52}px`,
+                aspectRatio: `${columns} / ${rows}`,
+              }}
+            >
+              {Array.from({ length: totalGrids }, (_, idx) => {
+                const lzIdx = (lightingAssignments[idx] ?? 1) - 1
+                const izIdx = (irrigationAssignments[idx] ?? 1) - 1
+                const isDragPreview = isCellInDragRect(idx)
+                const accentColor = activeTool === 'lighting' ? ZONE_COLORS[lzIdx] : IZ_COLORS[izIdx]
+
+                return (
+                  <div
+                    key={idx}
+                    onPointerDown={() => handleCellPointerDown(idx)}
+                    onPointerEnter={() => handleCellPointerEnter(idx)}
+                    style={{
+                      position: 'relative',
+                      background: 'var(--color-bg-elevated)',
+                      border: `1px solid ${isDragPreview ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'crosshair',
+                      overflow: 'hidden',
+                      transition: 'border-color var(--duration-fast) var(--ease-out)',
+                    }}
                   >
-                    {lightingLegend.map((zone) => (
-                      <option key={zone} value={zone}>
-                        LZ {zone}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              ) : (
-                <>
-                  <span>Assign to irrigation zone:</span>
-                  <select
-                    value={activeIrrigationZone}
-                    onChange={(e) => setActiveIrrigationZone(Number(e.target.value))}
+                    {/* Lighting zone overlay */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: ZONE_COLORS[lzIdx],
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    {/* Drag preview overlay */}
+                    {isDragPreview && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: accentColor,
+                          opacity: 0.6,
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    )}
+                    {/* IZ label */}
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 1,
+                        right: 2,
+                        fontSize: 8,
+                        fontFamily: 'var(--font-mono)',
+                        color: IZ_COLORS[izIdx],
+                        opacity: 0.9,
+                        pointerEvents: 'none',
+                        lineHeight: 1,
+                      }}
+                    >
+                      IZ{irrigationAssignments[idx] ?? 1}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Legend + summary footer */}
+          <footer
+            style={{
+              padding: 'var(--space-4) var(--space-6)',
+              borderTop: '1px solid var(--color-border)',
+              background: 'var(--color-bg-surface)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-3)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+              {lightingLegend.map((zone) => (
+                <span key={zone} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-xs)' }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: ZONE_BORDERS[zone - 1],
+                      border: `1px solid ${ZONE_BORDERS[zone - 1]}`,
+                    }}
+                  />
+                  <span style={{ color: 'var(--color-text-secondary)', ...mono }}>LZ {zone}</span>
+                </span>
+              ))}
+              <span style={{ width: 1, height: 14, background: 'var(--color-border)' }} />
+              {irrigationLegend.map((zone) => (
+                <span key={`iz-${zone}`} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-xs)' }}>
+                  <span
+                    style={{
+                      padding: '0 4px',
+                      borderRadius: 2,
+                      background: IZ_COLORS[zone - 1],
+                      color: '#0A0A0B',
+                      fontSize: 9,
+                      fontFamily: 'var(--font-mono)',
+                      fontWeight: 600,
+                      lineHeight: '14px',
+                    }}
                   >
-                    {irrigationLegend.map((zone) => (
-                      <option key={zone} value={zone}>
-                        IZ {zone}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
+                    IZ{zone}
+                  </span>
+                </span>
+              ))}
+              <span style={{ width: 1, height: 14, background: 'var(--color-border)' }} />
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <Lightbulb size={12} /> {lightingZones} lighting
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                <Waves size={12} /> {irrigationZones} irrigation
+              </span>
             </div>
 
             <div
-              className="farm-grid-preview"
-              onPointerUp={finalizeDrag}
+              style={{
+                display: 'flex',
+                gap: 'var(--space-6)',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--color-text-muted)',
+                ...mono,
+              }}
             >
-              <div
-                className="farm-grid-canvas"
-                style={{
-                  gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                  gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
-                }}
-              >
-                {Array.from({ length: totalGrids }, (_, idx) => (
-                  <span
-                    key={idx}
-                    className={`grid-cell zone-${lightingAssignments[idx] ?? 1} iz-${irrigationAssignments[idx] ?? 1} ${isCellInDragRect(idx) ? 'drag-preview' : ''}`}
-                    onPointerDown={() => handleCellPointerDown(idx)}
-                    onPointerEnter={() => handleCellPointerEnter(idx)}
-                  >
-                    <b className={`irrigation-cell-tag iz-${irrigationAssignments[idx] ?? 1}`}>
-                      IZ {irrigationAssignments[idx] ?? 1}
-                    </b>
-                  </span>
-                ))}
-
-                {dragRect ? (
-                  <span
-                    className={`drag-rect ${activeTool}`}
-                    style={{
-                      top: `${(dragRect.minRow / rows) * 100}%`,
-                      left: `${(dragRect.minCol / columns) * 100}%`,
-                      width: `${((dragRect.maxCol - dragRect.minCol + 1) / columns) * 100}%`,
-                      height: `${((dragRect.maxRow - dragRect.minRow + 1) / rows) * 100}%`,
-                    }}
-                  ></span>
-                ) : null}
-              </div>
+              <span>
+                Nursery <strong style={{ color: 'var(--color-text-primary)' }}>{nurseryCapacity}</strong> seedlings
+              </span>
+              <span>
+                Lead time <strong style={{ color: 'var(--color-text-primary)' }}>{seedlingLeadDays}</strong> days
+              </span>
             </div>
-
-            <footer className="preview-footer">
-              <div className="legend-row">
-                {lightingLegend.map((zone) => (
-                  <span key={zone} className="legend-item">
-                    <b className={`legend-swatch zone-${zone}`}></b>
-                    LZ {zone}
-                  </span>
-                ))}
-                {irrigationLegend.map((zone) => (
-                  <span key={`iz-${zone}`} className="legend-item">
-                    <b className={`legend-tag iz-${zone}`}>IZ {zone}</b>
-                  </span>
-                ))}
-                <span className="legend-item">
-                  <Lightbulb size={14} />
-                  {lightingZones} lighting zones
-                </span>
-                <span className="legend-item">
-                  <Waves size={14} />
-                  {irrigationZones} irrigation zones
-                </span>
-              </div>
-
-              <div className="nursery-summary-bar">
-                <span>
-                  Nursery capacity <strong>{nurseryCapacity}</strong> seedlings
-                </span>
-                <span>
-                  Lead time <strong>{seedlingLeadDays}</strong> days before transplant
-                </span>
-              </div>
-
-              <StepActions
-                onBack={onBackToWelcome}
-                onNext={handleContinue}
-                backLabel="Back to Welcome"
-                nextLabel="Save & Continue"
-              />
-            </footer>
-          </section>
+          </footer>
         </section>
-      </section>
+      </div>
     </main>
   )
 }
