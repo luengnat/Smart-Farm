@@ -201,3 +201,32 @@ export async function exportPlan(planId: number): Promise<Blob> {
 export async function fetchFarmPlans(farmId: number): Promise<{ plans: PlanSummary[] }> {
   return apiFetch<{ plans: PlanSummary[] }>(`/farms/${farmId}/plans`)
 }
+
+export interface ActionItem {
+  id: number
+  type: string
+  priority: string
+  week: number
+  cropId: string | null
+  gridIndexes: number[] | null
+  description: string
+  revenueImpact: number
+  batchId: string | null
+  completed: boolean
+}
+
+export async function fetchActions(planId: number): Promise<{ actions: ActionItem[]; currentWeek: number }> {
+  return apiFetch<{ actions: ActionItem[]; currentWeek: number }>(`/plans/${planId}/actions`)
+}
+
+export async function completeAction(planId: number, actionId: number): Promise<{ id: number; completed: boolean }> {
+  return apiFetch<{ id: number; completed: boolean }>(`/plans/${planId}/actions/${actionId}`, {
+    method: 'PATCH',
+  })
+}
+
+export async function advanceWeek(planId: number): Promise<{ currentWeek: number }> {
+  return apiFetch<{ currentWeek: number }>(`/plans/${planId}/advance-week`, {
+    method: 'POST',
+  })
+}

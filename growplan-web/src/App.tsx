@@ -15,6 +15,7 @@ import { SetupFarmPage } from './pages/SetupFarmPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { CropComparisonPage } from './pages/CropComparisonPage'
 import { PlanHistoryPage } from './pages/PlanHistoryPage'
+import { TasksPage } from './pages/TasksPage'
 import type { CropGoalsById, GeneratedPlanData, GoalData, SetupFarmData } from './types/planning'
 
 type Page =
@@ -30,6 +31,7 @@ type Page =
   | 'analytics'
   | 'crop-comparison'
   | 'plan-history'
+  | 'tasks'
 
 const BALANCED_RESERVE_PERCENT = 10
 
@@ -310,6 +312,8 @@ function AppContent() {
       content = <CropComparisonPage planId={planId} onBack={() => setPage('dashboard')} />
     } else if (page === 'plan-history') {
       content = <PlanHistoryPage planId={planId} onBack={() => setPage('dashboard')} />
+    } else if (page === 'tasks') {
+      content = <TasksPage planId={planId} onBack={() => setPage('dashboard')} />
     } else if (page === 'replan') {
       content = (
         <ReplanPage
