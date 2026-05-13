@@ -125,6 +125,8 @@ export async function fetchPlan(planId: number, options?: { nurseryCapacity?: nu
     cropId: (a.cropId ?? a.crop_id ?? '') as string,
     gridsAllocated: (a.gridsAllocated ?? a.grids_allocated ?? 0) as number,
     reservePercent: (a.reservePercent ?? a.reserve_percent ?? 0) as number,
+    sustainableKgPerWeek: (a.sustainableKgPerWeek ?? a.sustainable_kg_per_week ?? 0) as number,
+    revenuePerWeek: (a.revenuePerWeek ?? a.revenue_per_week ?? 0) as number,
   }))
   const totalAllocated = allocations.reduce((sum, a) => sum + a.gridsAllocated, 0)
   const revenue = data.revenue
@@ -222,7 +224,7 @@ export async function fetchPlan(planId: number, options?: { nurseryCapacity?: nu
         label: crop?.name ?? a.cropId,
         color: crop?.accent ?? '#6b7280',
         allocatedCells: a.gridsAllocated,
-        targetPerWeek: crop ? a.gridsAllocated * (crop.yieldPerGrid ?? 0) : 0,
+        targetPerWeek: a.sustainableKgPerWeek || (crop ? a.gridsAllocated * (crop.yieldPerGrid ?? 0) : 0),
         reservePercent: (a.reservePercent ?? a.reserve_percent ?? 0) as number,
         seedlingsPerWeek: crop ? a.gridsAllocated * (crop.seedlingsPerGrid ?? 6) : 0,
       }

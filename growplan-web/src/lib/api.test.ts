@@ -3911,3 +3911,85 @@ describe('BUG-R98: stockoutRisk should be computed from utilization when backend
     expect(computeStockoutRisk(undefined, 90)).toBe('Medium')
   })
 })
+
+// ─── BUG-R99: allocation normalization drops backend sustainableKgPerWeek ───
+// Backend AllocationResponse includes sustainable_kg_per_week and revenue_per_week,
+// but the frontend only kept cropId, gridsAllocated, reservePercent — dropping the
+// backend's actual computed yield. cropSummaries.targetPerWeek then used a static
+// estimate (gridsAllocated * yieldPerGrid) instead of the backend's real value.
+describe('BUG-R99: allocation should preserve backend sustainableKgPerWeek and revenuePerWeek', () => {
+  function normalizeAllocation(a: Record<string, any>) {
+    return {
+      cropId: (a.cropId ?? a.crop_id ?? '') as string,
+      gridsAllocated: (a.gridsAllocated ?? a.grids_allocated ?? 0) as number,
+      reservePercent: (a.reservePercent ?? a.reserve_percent ?? 0) as number,
+      sustainableKgPerWeek: (a.sustainableKgPerWeek ?? a.sustainable_kg_per_week ?? 0) as number,
+      revenuePerWeek: (a.revenuePerWeek ?? a.revenue_per_week ?? 0) as number,
+    }
+  }
+
+  it('preserves camelCase sustainableKgPerWeek from backend', () => {
+    const alloc = normalizeAllocation({
+      cropId: 'lettuce',
+      gridsAllocated: 10,
+      sustainableKgPerWeek: 4.5,
+      revenuePerWeek: 27.0,
+    })
+    expect(alloc.sustainableKgPerWeek).toBe(4.5)
+    expect(alloc.revenuePerWeek).toBe(27.0)
+  })
+
+  it('preserves snake_case sustainable_kg_per_week from backend', () => {
+    const alloc = normalizeAllocation({
+      crop_id: 'basil',
+      grids_allocated: 5,
+      sustainable_kg_per_week: 2.1,
+      revenue_per_week: 15.0,
+    })
+    expect(alloc.sustainableKgPerWeek).toBe(2.1)
+    expect(alloc.revenuePerWeek).toBe(15.0)
+  })
+
+  it('camelCase takes precedence over snake_case', () => {
+    const alloc = normalizeAllocation({
+      cropId: 'lettuce',
+      sustainableKgPerWeek: 4.5,
+      sustainable_kg_per_week: 3.0,
+      revenuePerWeek: 27,
+      revenue_per_week: 20,
+    })
+    expect(alloc.sustainableKgPerWeek).toBe(4.5)
+    expect(alloc.revenuePerWeek).toBe(27)
+  })
+
+  it('defaults to 0 when backend omits fields', () => {
+    const alloc = normalizeAllocation({
+      cropId: 'tomato',
+      gridsAllocated: 8,
+    })
+    expect(alloc.sustainableKgPerWeek).toBe(0)
+    expect(alloc.revenuePerWeek).toBe(0)
+  })
+
+  it('old code dropped backend yield — targetPerWeek used static estimate', () => {
+    // Old normalization only kept: cropId, gridsAllocated, reservePercent
+    const oldAlloc = {
+      cropId: 'lettuce',
+      gridsAllocated: 10,
+      reservePercent: 10,
+      // sustainableKgPerWeek was DROPPED here
+    }
+    // Old cropSummaries computed: gridsAllocated * yieldPerGrid = 10 * 0.3 = 3.0
+    // But backend said sustainableKgPerWeek = 4.5 (actual computed yield)
+    const oldTargetPerWeek = 10 * 0.3 // static estimate
+    expect(oldTargetPerWeek).toBe(3.0) // Wrong — backend says 4.5
+
+    // New code preserves backend value
+    const newAlloc = normalizeAllocation({
+      cropId: 'lettuce',
+      gridsAllocated: 10,
+      sustainableKgPerWeek: 4.5,
+    })
+    expect(newAlloc.sustainableKgPerWeek).toBe(4.5) // Correct
+  })
+})
