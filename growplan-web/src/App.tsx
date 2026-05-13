@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import { cropLibrary, type CropId } from './constants/crops'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppShell } from './components/AppShell'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { DefineGoalPage } from './pages/DefineGoalPage'
@@ -16,7 +17,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { CropComparisonPage } from './pages/CropComparisonPage'
 import { PlanHistoryPage } from './pages/PlanHistoryPage'
 import { TasksPage } from './pages/TasksPage'
-import { apiFetch, confirmPlan } from './lib/api'
+import { confirmPlan, fetchFarm, fetchPlan } from './lib/api'
 import type { CropGoalsById, GeneratedPlanData, GoalData, SetupFarmData } from './types/planning'
 
 type Page =
@@ -41,6 +42,7 @@ const createInitialSetupFarmData = (): SetupFarmData => ({
   farmLocation: '',
   rows: 10,
   columns: 12,
+  levels: 3,
   lightingZones: 3,
   irrigationZones: 2,
   nurseryCapacity: 240,
@@ -56,7 +58,7 @@ const createBalancedCropGoals = (
 ): CropGoalsById => {
   const selectedCropSet = new Set(selectedCropIds)
   const selectedCrops = cropLibrary.filter((crop) => selectedCropSet.has(crop.id))
-  const availableCapacityPerWeek = farm.rows * farm.columns
+  const availableCapacityPerWeek = farm.rows * farm.columns * farm.levels
   const gridSharePerCrop =
     selectedCrops.length > 0 ? availableCapacityPerWeek / selectedCrops.length : 0
   const balancedReservePercent = selectedCrops.length > 0 ? BALANCED_RESERVE_PERCENT : 0
@@ -96,17 +98,21 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 
 function saveToStorage(key: string, value: unknown): void {
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    if (value === null || value === undefined) {
+      localStorage.removeItem(key)
+    } else {
+      localStorage.setItem(key, JSON.stringify(value))
+    }
   } catch { /* ignore quota errors */ }
 }
 
 const WIZARD_KEY = 'gp_wizard_draft'
 
-function saveWizardDraft(data: { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[] }) {
+function saveWizardDraft(data: { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[]; goalData?: GoalData }) {
   saveToStorage(WIZARD_KEY, data)
 }
 
-function loadWizardDraft(): { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[] } | null {
+function loadWizardDraft(): { page: string; setupFarmData?: SetupFarmData; selectedCropIds?: CropId[]; goalData?: GoalData } | null {
   try {
     const stored = localStorage.getItem(WIZARD_KEY)
     return stored ? JSON.parse(stored) : null
@@ -130,11 +136,27 @@ function AppContent() {
   const [setupFarmData, setSetupFarmData] = useState<SetupFarmData>(draft?.setupFarmData || initialSetupFarmData)
   const [selectedCropIds, setSelectedCropIds] = useState<CropId[]>(draft?.selectedCropIds || [])
   const [goalData, setGoalData] = useState<GoalData>(
-    createInitialGoalData(draft?.setupFarmData || initialSetupFarmData, draft?.selectedCropIds || []),
+    draft?.goalData ?? createInitialGoalData(draft?.setupFarmData || initialSetupFarmData, draft?.selectedCropIds || []),
   )
   const [generatedPlan, setGeneratedPlan] = useState<GeneratedPlanData | null>(null)
   const [farmId, setFarmId] = useState<number | null>(loadFromStorage('gp_farmId', null))
   const [planId, setPlanId] = useState<number | null>(loadFromStorage('gp_planId', null))
+  const [planRefresh, setPlanRefresh] = useState(0)
+
+  function handleLogout() {
+    logout()
+    setFarmId(null)
+    setPlanId(null)
+    setGeneratedPlan(null)
+    const freshFarm = createInitialSetupFarmData()
+    setSetupFarmData(freshFarm)
+    setSelectedCropIds([])
+    setGoalData(createInitialGoalData(freshFarm, []))
+    saveToStorage('gp_farmId', null)
+    saveToStorage('gp_planId', null)
+    clearWizardDraft()
+    setPage('login')
+  }
 
   // Load plan data from API on mount when authenticated
   useEffect(() => {
@@ -142,7 +164,7 @@ function AppContent() {
     let cancelled = false
     ;(async () => {
       try {
-        const plan = await apiFetch<GeneratedPlanData>(`/plans/${planId}`)
+        const plan = await fetchPlan(planId, { nurseryCapacity: setupFarmData.nurseryCapacity })
         if (!cancelled) setGeneratedPlan(plan)
       } catch {
         if (!cancelled) {
@@ -152,7 +174,7 @@ function AppContent() {
       }
     })()
     return () => { cancelled = true }
-  }, [user, planId])
+  }, [user, planId, planRefresh])
 
   // Load farm data from API on mount
   useEffect(() => {
@@ -160,17 +182,9 @@ function AppContent() {
     let cancelled = false
     ;(async () => {
       try {
-        const farm = await apiFetch<Record<string, unknown>>(`/farms/${farmId}`)
+        const farm = await fetchFarm(farmId)
         if (!cancelled) {
-          setSetupFarmData((prev) => ({
-            ...prev,
-            farmName: farm.name as string,
-            farmLocation: (farm.location as string) || '',
-            rows: farm.rows as number,
-            columns: farm.columns as number,
-            growingSystem: (farm.growingSystem as string) || 'hydroponic',
-            nurseryCapacity: ((farm.nurseryTrayCount as number) || 1) * ((farm.nurseryTrayCells as number) || 200),
-          }))
+          setSetupFarmData((prev) => ({ ...prev, ...farm }))
         }
       } catch { /* farm may not exist yet */ }
     })()
@@ -182,6 +196,13 @@ function AppContent() {
       setPage('login')
     }
   }, [user, loading, page])
+
+  // Redirect authenticated users away from auth pages
+  useEffect(() => {
+    if (!loading && user && (page === 'login' || page === 'register')) {
+      setPage(farmId ? 'dashboard' : 'setup-farm')
+    }
+  }, [user, loading, page, farmId])
 
   if (loading) {
     return (
@@ -237,7 +258,7 @@ function AppContent() {
         <Toaster position="top-right" />
         <SetupFarmPage
           initialData={setupFarmData}
-          onBackToWelcome={() => { logout(); setPage('login') }}
+          onBackToWelcome={() => handleLogout()}
           onContinue={(nextSetupFarmData) => {
             setSetupFarmData(nextSetupFarmData)
             setGoalData((prev) => ({
@@ -262,13 +283,14 @@ function AppContent() {
           selectedCropIds={selectedCropIds}
           onBackToSetup={() => setPage('setup-farm')}
           onContinue={(nextSelectedCropIds) => {
-            setSelectedCropIds(nextSelectedCropIds)
-            setGoalData((prev) => ({
-              ...prev,
+            const nextGoalData = {
+              ...goalData,
               cropGoals: createBalancedCropGoals(setupFarmData, nextSelectedCropIds),
-            }))
+            }
+            setSelectedCropIds(nextSelectedCropIds)
+            setGoalData(nextGoalData)
             setGeneratedPlan(null)
-            saveWizardDraft({ page: 'define-goal', selectedCropIds: nextSelectedCropIds })
+            saveWizardDraft({ page: 'define-goal', setupFarmData, selectedCropIds: nextSelectedCropIds, goalData: nextGoalData })
             setPage('define-goal')
           }}
         />
@@ -287,7 +309,7 @@ function AppContent() {
           onBackToSelectCrops={() => setPage('select-crops')}
           onContinue={(nextGoalData) => {
             setGoalData(nextGoalData)
-            saveWizardDraft({ page: 'generate-plan', selectedCropIds })
+            saveWizardDraft({ page: 'generate-plan', setupFarmData, selectedCropIds, goalData: nextGoalData })
             setPage('generate-plan')
           }}
         />
@@ -336,7 +358,16 @@ function AppContent() {
           onBackToGenerate={() => setPage('generate-plan')}
           onConfirm={async () => {
             if (planId) {
-              try { await confirmPlan(planId) } catch { /* plan already confirmed */ }
+              try {
+                await confirmPlan(planId)
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                if (/409|conflict|already.*confirm/i.test(msg)) {
+                  // Plan was already confirmed — proceed to dashboard
+                } else {
+                  throw err
+                }
+              }
             }
             setPage('dashboard')
           }}
@@ -368,7 +399,7 @@ function AppContent() {
     } else if (page === 'plan-history') {
       content = <PlanHistoryPage planId={planId} onBack={() => setPage('dashboard')} />
     } else if (page === 'tasks') {
-      content = <TasksPage planId={planId} onBack={() => setPage('dashboard')} />
+      content = <TasksPage planId={planId} onBack={() => { setPlanRefresh((n) => n + 1); setPage('dashboard') }} />
     } else if (page === 'replan') {
       content = (
         <ReplanPage
@@ -378,8 +409,12 @@ function AppContent() {
           generatedPlan={generatedPlan}
           farmId={farmId}
           onBackToDashboard={() => setPage('dashboard')}
-          onApplyPlan={(nextPlan) => {
+          onApplyPlan={(nextPlan, nextPlanId) => {
             setGeneratedPlan(nextPlan)
+            if (nextPlanId) {
+              setPlanId(nextPlanId)
+              saveToStorage('gp_planId', nextPlanId)
+            }
             setPage('dashboard')
           }}
         />
@@ -393,7 +428,7 @@ function AppContent() {
           currentPage={page}
           onNavigate={(p) => setPage(p as Page)}
           farmName={setupFarmData.farmName}
-          onLogout={() => { logout(); setPage('login') }}
+          onLogout={() => handleLogout()}
         >
           {content}
         </AppShell>
@@ -417,9 +452,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 
