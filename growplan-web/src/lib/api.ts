@@ -129,10 +129,11 @@ export async function fetchPlan(planId: number, options?: { nurseryCapacity?: nu
     revenuePerWeek: (a.revenuePerWeek ?? a.revenue_per_week ?? 0) as number,
   }))
   const totalAllocated = allocations.reduce((sum, a) => sum + a.gridsAllocated, 0)
+  const allocationRevenue = allocations.reduce((sum, a) => sum + a.revenuePerWeek, 0)
   const revenue = data.revenue
   const totalRevenue = typeof revenue === 'number'
     ? revenue
-    : (revenue?.totalPerWeek ?? revenue?.total_per_week ?? revenue?.totalRevenuePerWeek ?? revenue?.total_revenue_per_week ?? data.totalRevenue ?? data.total_revenue ?? 0)
+    : (revenue?.totalPerWeek ?? revenue?.total_per_week ?? revenue?.totalRevenuePerWeek ?? revenue?.total_revenue_per_week ?? data.totalRevenue ?? data.total_revenue ?? allocationRevenue || 0)
 
   // Compute timeline rows from valid cell data (index-bounds-filtered)
   const cropTimelines = new Map<string, { minWeek: number; maxHarvest: number; count: number }>()

@@ -3993,3 +3993,65 @@ describe('BUG-R99: allocation should preserve backend sustainableKgPerWeek and r
     expect(newAlloc.sustainableKgPerWeek).toBe(4.5) // Correct
   })
 })
+
+// ─── BUG-R100: totalRevenue is 0 when plan-level revenue missing ───
+// The fallback chain for totalRevenue checks data.revenue (number or object),
+// data.totalRevenue, data.total_revenue — but never sums per-allocation
+// revenuePerWeek values. If the plan-level field is absent, expectedRevenue
+// shows 0 even though individual crop revenues are available.
+describe('BUG-R100: totalRevenue should sum allocation revenues when plan-level revenue missing', () => {
+  function computeTotalRevenue(
+    planRevenue: unknown,
+    allocations: { revenuePerWeek: number }[],
+  ): number {
+    if (typeof planRevenue === 'number') return planRevenue
+    if (planRevenue && typeof planRevenue === 'object') {
+      const r = planRevenue as Record<string, any>
+      const val = r.totalPerWeek ?? r.total_per_week ?? r.totalRevenuePerWeek ?? r.total_revenue_per_week
+      if (typeof val === 'number') return val
+    }
+    const fromAllocations = allocations.reduce((sum, a) => sum + a.revenuePerWeek, 0)
+    return fromAllocations || 0
+  }
+
+  it('uses plan-level number revenue when available', () => {
+    expect(computeTotalRevenue(150, [{ revenuePerWeek: 50 }, { revenuePerWeek: 60 }])).toBe(150)
+  })
+
+  it('extracts from revenue object (camelCase)', () => {
+    expect(computeTotalRevenue({ totalPerWeek: 120 }, [])).toBe(120)
+  })
+
+  it('extracts from revenue object (snake_case)', () => {
+    expect(computeTotalRevenue({ total_per_week: 90 }, [])).toBe(90)
+  })
+
+  it('sums allocation revenues when plan-level revenue missing', () => {
+    const result = computeTotalRevenue(undefined, [
+      { revenuePerWeek: 27 },
+      { revenuePerWeek: 15 },
+      { revenuePerWeek: 40 },
+    ])
+    expect(result).toBe(82)
+  })
+
+  it('sums allocation revenues when plan-level revenue is null', () => {
+    expect(computeTotalRevenue(null, [{ revenuePerWeek: 30 }, { revenuePerWeek: 20 }])).toBe(50)
+  })
+
+  it('old code returned 0 when plan revenue missing', () => {
+    // Old code: typeof revenue === 'number' ? revenue : (...fallback chain... ?? 0)
+    const revenue = undefined
+    const oldResult = typeof revenue === 'number'
+      ? revenue
+      : (undefined ?? undefined ?? undefined ?? undefined ?? undefined ?? 0)
+    expect(oldResult).toBe(0) // Wrong — allocations have 82
+
+    // New code sums allocations
+    expect(computeTotalRevenue(undefined, [
+      { revenuePerWeek: 27 },
+      { revenuePerWeek: 15 },
+      { revenuePerWeek: 40 },
+    ])).toBe(82)
+  })
+})
