@@ -124,6 +124,7 @@ async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
   const allocations = rawAllocations.map((a) => ({
     cropId: (a.cropId ?? a.crop_id ?? '') as string,
     gridsAllocated: (a.gridsAllocated ?? a.grids_allocated ?? 0) as number,
+    reservePercent: (a.reservePercent ?? a.reserve_percent ?? 0) as number,
   }))
   const totalAllocated = allocations.reduce((sum, a) => sum + a.gridsAllocated, 0)
   const revenue = data.revenue

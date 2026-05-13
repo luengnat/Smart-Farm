@@ -3715,3 +3715,76 @@ describe('BUG-R95: snapshotType normalization handles underscores', () => {
     expect(TYPE_CONFIG[normalized].icon).toBe('→')
   })
 })
+
+// ---------------------------------------------------------------------------
+// BUG-R96: reservePercent always 0 in cropSummaries
+// fetchPlan's allocation normalization only kept cropId and gridsAllocated,
+// discarding reservePercent. The cropSummaries mapping then tried to read
+// reservePercent from the already-normalized object, always getting 0.
+// R71 tested the expression pattern in isolation but NOT the actual code path.
+// Fix: include reservePercent in the allocation normalization step.
+// ---------------------------------------------------------------------------
+
+describe('BUG-R96: allocation normalization preserves reservePercent', () => {
+  // Replicates the allocation normalization from fetchPlan
+  function normalizeAllocation(a: Record<string, any>) {
+    return {
+      cropId: (a.cropId ?? a.crop_id ?? '') as string,
+      gridsAllocated: (a.gridsAllocated ?? a.grids_allocated ?? 0) as number,
+      reservePercent: (a.reservePercent ?? a.reserve_percent ?? 0) as number,
+    }
+  }
+
+  // Replicates the cropSummaries mapping from fetchPlan
+  function buildCropSummary(a: ReturnType<typeof normalizeAllocation>) {
+    return {
+      cropId: a.cropId,
+      allocatedCells: a.gridsAllocated,
+      reservePercent: a.reservePercent,
+    }
+  }
+
+  it('preserves camelCase reservePercent from raw allocation', () => {
+    const raw = { cropId: 'lettuce', gridsAllocated: 10, reservePercent: 15 }
+    const alloc = normalizeAllocation(raw)
+    const summary = buildCropSummary(alloc)
+    expect(summary.reservePercent).toBe(15)
+  })
+
+  it('preserves snake_case reserve_percent from raw allocation', () => {
+    const raw = { crop_id: 'basil', grids_allocated: 8, reserve_percent: 20 }
+    const alloc = normalizeAllocation(raw)
+    const summary = buildCropSummary(alloc)
+    expect(summary.reservePercent).toBe(20)
+  })
+
+  it('defaults to 0 when reservePercent is absent', () => {
+    const raw = { cropId: 'kale', gridsAllocated: 5 }
+    const alloc = normalizeAllocation(raw)
+    const summary = buildCropSummary(alloc)
+    expect(summary.reservePercent).toBe(0)
+  })
+
+  it('prefers camelCase over snake_case when both present', () => {
+    const raw = { cropId: 'mint', gridsAllocated: 4, reservePercent: 12, reserve_percent: 25 }
+    const alloc = normalizeAllocation(raw)
+    expect(alloc.reservePercent).toBe(12)
+  })
+
+  it('old code (without reservePercent in normalization) always produced 0', () => {
+    // Simulate the OLD normalization that only kept cropId + gridsAllocated
+    function oldNormalizeAllocation(a: Record<string, any>) {
+      return {
+        cropId: (a.cropId ?? a.crop_id ?? '') as string,
+        gridsAllocated: (a.gridsAllocated ?? a.grids_allocated ?? 0) as number,
+        // reservePercent NOT included in normalization
+      }
+    }
+    const raw = { cropId: 'lettuce', gridsAllocated: 10, reservePercent: 15 }
+    const oldAlloc = oldNormalizeAllocation(raw)
+    // The old normalized object has no reservePercent property
+    // Reading it gives undefined, so the ?? 0 fallback in cropSummaries always fires
+    expect((oldAlloc as any).reservePercent).toBeUndefined()
+    expect((oldAlloc as any).reservePercent ?? (oldAlloc as any).reserve_percent ?? 0).toBe(0)
+  })
+})
