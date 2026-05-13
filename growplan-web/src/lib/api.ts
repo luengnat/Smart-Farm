@@ -73,15 +73,15 @@ export async function generatePlan(
     }),
   })
 
-  const plan = await pollForPlan(resp.planId)
+  const plan = await pollForPlan(resp.planId, 30, 500, { nurseryCapacity: params.farm.nurseryCapacity })
   return { planId: resp.planId, plan }
 }
 
-async function pollForPlan(planId: number, maxAttempts = 30, intervalMs = 500): Promise<GeneratedPlanData> {
+async function pollForPlan(planId: number, maxAttempts = 30, intervalMs = 500, options?: { nurseryCapacity?: number }): Promise<GeneratedPlanData> {
   for (let i = 0; i < maxAttempts; i++) {
     const status = await apiFetch<{ planId: number; status: string }>(`/plans/${planId}/status`)
     if (status.status === 'completed' || status.status === 'confirmed') {
-      return fetchPlan(planId)
+      return fetchPlan(planId, options)
     }
     if (status.status === 'failed') {
       throw new Error('Plan generation failed')
@@ -92,7 +92,7 @@ async function pollForPlan(planId: number, maxAttempts = 30, intervalMs = 500): 
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
+export async function fetchPlan(planId: number, options?: { nurseryCapacity?: number }): Promise<GeneratedPlanData> {
   const data = await apiFetch<Record<string, any>>(`/plans/${planId}`)
   const rows = data.rows ?? 0
   const columns = data.columns ?? 0
@@ -179,7 +179,8 @@ async function fetchPlan(planId: number): Promise<GeneratedPlanData> {
     }
   })
 
-  const nurseryCapacity = (data.nurseryTrayCount ?? data.nursery_tray_count ?? 1) * (data.nurseryTrayCells ?? data.nursery_tray_cells ?? 200)
+  const nurseryCapacity = options?.nurseryCapacity
+    ?? (data.nurseryTrayCount ?? data.nursery_tray_count ?? 1) * (data.nurseryTrayCells ?? data.nursery_tray_cells ?? 200)
   const horizonWeeks = data.horizonWeeks ?? data.horizon_weeks ?? 8
   const nurseryLoad = Array.from({ length: horizonWeeks }, (_, i) => {
     const week = i + 1

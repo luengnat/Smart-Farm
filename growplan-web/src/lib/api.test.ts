@@ -3788,3 +3788,74 @@ describe('BUG-R96: allocation normalization preserves reservePercent', () => {
     expect((oldAlloc as any).reservePercent ?? (oldAlloc as any).reserve_percent ?? 0).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// BUG-R97: nursery load computed against wrong capacity (always 200)
+// fetchPlan reads nurseryTrayCount and nurseryTrayCells from plan data,
+// but the backend PlanResponse schema doesn't include these fields.
+// They're farm-level config, not plan-level. So nurseryCapacity always
+// fell back to 1 * 200 = 200, producing wrong utilization percentages
+// and risk levels. A farm with 240 capacity and 180 seedlings would show
+// 90% (High risk) instead of the correct 75% (Medium risk).
+// Fix: accept optional nurseryCapacity parameter to use the farm's value.
+// ---------------------------------------------------------------------------
+
+describe('BUG-R97: nursery load uses farm capacity, not hardcoded 200', () => {
+  function computeNurseryCapacity(dataNurseryFields: Record<string, any>, farmCapacity?: number): number {
+    return farmCapacity
+      ?? (dataNurseryFields.nurseryTrayCount ?? dataNurseryFields.nursery_tray_count ?? 1)
+         * (dataNurseryFields.nurseryTrayCells ?? dataNurseryFields.nursery_tray_cells ?? 200)
+  }
+
+  function computeUtilizationPct(activeSeedlings: number, capacity: number): number {
+    return capacity > 0 ? Math.round((activeSeedlings / capacity) * 100) : 0
+  }
+
+  function computeRisk(pct: number): 'Low' | 'Medium' | 'High' {
+    return pct > 90 ? 'High' : pct > 70 ? 'Medium' : 'Low'
+  }
+
+  it('uses farm capacity when provided', () => {
+    const capacity = computeNurseryCapacity({}, 240)
+    expect(capacity).toBe(240)
+  })
+
+  it('falls back to plan data when no farm capacity provided', () => {
+    const capacity = computeNurseryCapacity({ nurseryTrayCount: 3, nurseryTrayCells: 100 })
+    expect(capacity).toBe(300)
+  })
+
+  it('falls back to 200 when nothing is available', () => {
+    const capacity = computeNurseryCapacity({})
+    expect(capacity).toBe(200)
+  })
+
+  it('farm capacity of 240 produces correct risk for 190 seedlings', () => {
+    const capacity = computeNurseryCapacity({}, 240)
+    const pct = computeUtilizationPct(190, capacity)
+    const risk = computeRisk(pct)
+    expect(pct).toBe(79)  // 190/240 = 79.17% → round to 79%
+    expect(risk).toBe('Medium')
+  })
+
+  it('old code (hardcoded 200) shows wrong risk for same scenario', () => {
+    const oldCapacity = computeNurseryCapacity({})  // No farm capacity → 200
+    const pct = computeUtilizationPct(190, oldCapacity)
+    const risk = computeRisk(pct)
+    expect(pct).toBe(95)  // 190/200 = 95%
+    expect(risk).toBe('High')  // Wrong! Correct answer is Medium (79%)
+  })
+
+  it('snake_case nursery fields work as fallback', () => {
+    const capacity = computeNurseryCapacity({ nursery_tray_count: 2, nursery_tray_cells: 144 })
+    expect(capacity).toBe(288)
+  })
+
+  it('farm capacity takes precedence over plan data', () => {
+    const capacity = computeNurseryCapacity(
+      { nurseryTrayCount: 1, nurseryTrayCells: 200 },
+      480,
+    )
+    expect(capacity).toBe(480)
+  })
+})
