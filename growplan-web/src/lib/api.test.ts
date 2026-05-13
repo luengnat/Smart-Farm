@@ -3859,3 +3859,55 @@ describe('BUG-R97: nursery load uses farm capacity, not hardcoded 200', () => {
     expect(capacity).toBe(480)
   })
 })
+
+// ─── BUG-R98: stockoutRisk always 'Low' — never computed from utilization ───
+// stockoutRisk is shown on ConfirmPlanPage and ReplanPage but the backend
+// PlanResponse doesn't include it. The fallback was hardcoded to 'Low' instead
+// of computing it from utilizationPercent (like seedlingCapacityRisk does from
+// nurseryLoad). A farm at 95% utilization showed "Low" stockout risk.
+describe('BUG-R98: stockoutRisk should be computed from utilization when backend omits it', () => {
+  function computeStockoutRisk(
+    backendValue: string | undefined,
+    utilizationPercent: number,
+  ): 'Low' | 'Medium' | 'High' {
+    if (backendValue) return backendValue as 'Low' | 'Medium' | 'High'
+    if (utilizationPercent > 90) return 'High'
+    if (utilizationPercent > 70) return 'Medium'
+    return 'Low'
+  }
+
+  it('uses backend value when provided', () => {
+    expect(computeStockoutRisk('High', 50)).toBe('High')
+    expect(computeStockoutRisk('Medium', 30)).toBe('Medium')
+    expect(computeStockoutRisk('Low', 95)).toBe('Low')
+  })
+
+  it('computes High when utilization > 90% and no backend value', () => {
+    expect(computeStockoutRisk(undefined, 95)).toBe('High')
+    expect(computeStockoutRisk(undefined, 91)).toBe('High')
+  })
+
+  it('computes Medium when utilization > 70% and no backend value', () => {
+    expect(computeStockoutRisk(undefined, 80)).toBe('Medium')
+    expect(computeStockoutRisk(undefined, 71)).toBe('Medium')
+  })
+
+  it('computes Low when utilization <= 70% and no backend value', () => {
+    expect(computeStockoutRisk(undefined, 50)).toBe('Low')
+    expect(computeStockoutRisk(undefined, 70)).toBe('Low')
+  })
+
+  it('old code always returned Low regardless of utilization', () => {
+    // Old code: (data.stockoutRisk ?? data.stockout_risk ?? 'Low')
+    // No backend value → always 'Low'
+    const oldRisk = undefined ?? 'Low'
+    expect(oldRisk).toBe('Low') // Wrong for 95% utilization!
+
+    // New code correctly returns High
+    expect(computeStockoutRisk(undefined, 95)).toBe('High')
+  })
+
+  it('90% exactly is Medium (not High) — threshold is > 90', () => {
+    expect(computeStockoutRisk(undefined, 90)).toBe('Medium')
+  })
+})

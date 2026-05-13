@@ -200,16 +200,19 @@ export async function fetchPlan(planId: number, options?: { nurseryCapacity?: nu
     }
   })
 
+  const utilizationPercent = totalGrids > 0 ? Math.round((totalAllocated / totalGrids) * 100) : 0
+  const computedStockoutRisk = (utilizationPercent > 90 ? 'High' : utilizationPercent > 70 ? 'Medium' : 'Low') as 'Low' | 'Medium' | 'High'
+
   return {
     rows,
     columns,
     levels,
     currentWeek: data.currentWeek ?? data.current_week ?? 1,
     cells,
-    utilizationPercent: totalGrids > 0 ? Math.round((totalAllocated / totalGrids) * 100) : 0,
+    utilizationPercent,
     requiredCapacity: totalAllocated,
     availableCapacity: totalGrids,
-    stockoutRisk: (data.stockoutRisk ?? data.stockout_risk ?? 'Low') as 'Low' | 'Medium' | 'High',
+    stockoutRisk: (data.stockoutRisk ?? data.stockout_risk ?? computedStockoutRisk) as 'Low' | 'Medium' | 'High',
     seedlingCapacityRisk: (data.seedlingCapacityRisk ?? data.seedling_capacity_risk ?? (nurseryLoad.some(w => w.risk === 'High') ? 'High' : nurseryLoad.some(w => w.risk === 'Medium') ? 'Medium' : 'Low')) as 'Low' | 'Medium' | 'High',
     expectedRevenue: totalRevenue,
     cropSummaries: allocations.map((a) => {
