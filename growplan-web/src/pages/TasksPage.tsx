@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { fetchActions, completeAction, advanceWeek, type ActionItem } from '../lib/api'
 import { cropLibrary } from '../constants/crops'
-import toast from 'react-hot-toast'
+
 
 type Props = {
   planId: number | null
@@ -160,20 +160,24 @@ export function TasksPage({ planId, onBack }: Props) {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: (actionId: number) => completeAction(planId!, actionId),
+    mutationFn: (actionId: number) => {
+      if (!planId) throw new Error('No plan ID')
+      return completeAction(planId, actionId)
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['actions', planId] }),
-    onError: () => toast.error('Failed to update task'),
   })
 
   const advanceMutation = useMutation({
-    mutationFn: () => advanceWeek(planId!),
+    mutationFn: () => {
+      if (!planId) throw new Error('No plan ID')
+      return advanceWeek(planId)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['actions', planId] })
       setAdvancing(false)
     },
     onError: () => {
       setAdvancing(false)
-      toast.error('Failed to advance week')
     },
   })
 
@@ -183,6 +187,7 @@ export function TasksPage({ planId, onBack }: Props) {
   const urgent = actions.filter((a) => a.priority === 'urgent')
   const thisWeek = actions.filter((a) => a.priority === 'this-week')
   const upcoming = actions.filter((a) => a.priority === 'upcoming')
+  const other = actions.filter((a) => a.priority !== 'urgent' && a.priority !== 'this-week' && a.priority !== 'upcoming')
 
   const completedCount = actions.filter((a) => a.completed).length
   const totalCount = actions.length
@@ -327,6 +332,15 @@ export function TasksPage({ planId, onBack }: Props) {
         <ActionGroup
           title="Upcoming"
           actions={upcoming}
+          accent="#6b7280"
+          onToggle={(id) => toggleMutation.mutate(id)}
+        />
+      )}
+
+      {!isLoading && other.length > 0 && (
+        <ActionGroup
+          title="Other"
+          actions={other}
           accent="#6b7280"
           onToggle={(id) => toggleMutation.mutate(id)}
         />

@@ -47,7 +47,8 @@ def build_model(
 
     rows = farm["rows"]
     cols = farm["columns"]
-    total_grids = rows * cols
+    levels = farm.get("levels", 1)
+    total_grids = rows * cols * levels
     horizon = goal["planning_horizon_weeks"]
     priority = goal.get("priority", "maximize-revenue")
     commitments = goal.get("commitments", {})
@@ -147,6 +148,21 @@ def build_model(
         for w in range(horizon):
             model.Add(sum(x[cid, g, w] for cid in crop_ids) <= 1)
 
+    # 4b. Stagger production: limit batch size per crop per start week.
+    #     Ensures plantings are spread across weeks for continuous harvest
+    #     instead of everything starting at week 0.
+    for crop in crops:
+        cid = crop["id"]
+        wp = crop["weeks_on_panel"]
+        num_cycles = max(1, horizon // wp)
+        max_batch = max(1, total_grids // (num_cycles * max(1, len(crop_ids))))
+        for w in range(horizon):
+            starts_this_week = [
+                s[cid, g, w] for g in range(total_grids) if (cid, g, w) in s
+            ]
+            if len(starts_this_week) > max_batch:
+                model.Add(sum(starts_this_week) <= max_batch)
+
     # 5. Nursery tray capacity per week.
     buffer_pct = int(farm.get("nursery_buffer_pct", 0))
     effective_trays = max(
@@ -193,6 +209,18 @@ def build_model(
 
     revenue_terms: list[cp_model.LinearExpr] = []
     spatial_penalty_terms: list[cp_model.LinearExpr] = []
+    smoothing_penalty_terms: list[cp_model.LinearExpr] = []
+
+    # Harvest smoothing: minimize max batch size per crop per week.
+    # This pushes the solver to spread starts evenly across weeks.
+    for crop in crops:
+        cid = crop["id"]
+        max_starts = model.NewIntVar(0, total_grids, f"max_starts_{cid}")
+        for w in range(horizon):
+            starts = [s[cid, g, w] for g in range(total_grids) if (cid, g, w) in s]
+            if starts:
+                model.Add(max_starts >= sum(starts))
+        smoothing_penalty_terms.append(5 * max_starts)
 
     # Revenue contribution — accumulate only at start variables so each
     # planting cycle contributes once (not per grid-week of occupancy).
@@ -301,6 +329,7 @@ def build_model(
             + revenue_secondary
             + sum(spatial_penalty_terms)
             + sum(commitment_penalty_terms)
+            + sum(smoothing_penalty_terms)
         )
         model.Minimize(objective)
     else:
@@ -309,6 +338,7 @@ def build_model(
             sum(-t for t in revenue_terms)  # negate for minimization
             + sum(spatial_penalty_terms)  # already signed
             + sum(commitment_penalty_terms)
+            + sum(smoothing_penalty_terms)
         )
         model.Minimize(objective)
 
@@ -322,6 +352,7 @@ def build_model(
         "crop_map": crop_map,
         "rows": rows,
         "cols": cols,
+        "levels": levels,
         "total_grids": total_grids,
         "horizon": horizon,
         "priority": priority,

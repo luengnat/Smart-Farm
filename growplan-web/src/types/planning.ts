@@ -7,6 +7,7 @@ export type SetupFarmData = {
   farmLocation: string
   rows: number
   columns: number
+  levels: number
   lightingZones: number
   irrigationZones: number
   nurseryCapacity: number
@@ -29,10 +30,15 @@ export type GoalData = {
   cropGoals: CropGoalsById
 }
 
+export type CellPhase = 'empty' | 'planned' | 'seeded' | 'growing' | 'harvestable' | 'harvested'
+
 export type GeneratedPlanCell = {
-  cropId: CropId
+  cropId: CropId | ''
   color: string
   label: string
+  weekStarted: number
+  weekHarvestExpected: number
+  status: string
 }
 
 export type CropPlanSummary = {
@@ -76,6 +82,8 @@ export type NurseryLoadWeek = {
 export type GeneratedPlanData = {
   rows: number
   columns: number
+  levels: number
+  currentWeek: number
   cells: GeneratedPlanCell[]
   utilizationPercent: number
   requiredCapacity: number

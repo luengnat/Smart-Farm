@@ -11,6 +11,7 @@ class Farm(Base):
     location = Column(String(100), nullable=True)
     rows = Column(Integer, nullable=False)
     columns = Column(Integer, nullable=False)
+    levels = Column(Integer, nullable=False, default=1)
     growing_system = Column(String(50), nullable=False, default="hydroponic")
     nursery_tray_count = Column(Integer, nullable=False)
     nursery_tray_cells = Column(Integer, nullable=False, default=200)

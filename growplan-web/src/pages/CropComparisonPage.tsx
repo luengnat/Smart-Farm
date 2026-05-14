@@ -70,20 +70,20 @@ export function CropComparisonPage({ planId, onBack }: Props) {
       {data && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            {data.crops.map(crop => (
+            {(data.crops ?? []).map(crop => (
               <CropCard key={crop.cropId} crop={crop} isRecommended={crop.cropId === data.recommended} />
             ))}
           </div>
 
-          {data.crops.length >= 2 && (
+          {(data.crops ?? []).length >= 2 && (
             <div style={{ marginTop: '2rem' }}>
               <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '1rem' }}>Radar Comparison</h3>
               <ResponsiveContainer width="100%" height={350}>
-                <RadarChart data={buildRadarData(data.crops)}>
+                <RadarChart data={buildRadarData(data.crops ?? [])}>
                   <PolarGrid stroke="var(--color-border)" />
                   <PolarAngleAxis dataKey="dimension" tick={{ fill: 'var(--color-text-secondary)', fontSize: 11 }} />
                   <PolarRadiusAxis domain={[0, 100]} tick={{ fill: 'var(--color-text-secondary)', fontSize: 10 }} />
-                  {data.crops.map(crop => (
+                  {(data.crops ?? []).map(crop => (
                     <Radar
                       key={crop.cropId}
                       name={crop.cropName}
@@ -106,7 +106,7 @@ export function CropComparisonPage({ planId, onBack }: Props) {
 }
 
 function CropCard({ crop, isRecommended }: { crop: ComparisonCrop; isRecommended: boolean }) {
-  const m = crop.metrics
+  const m = crop.metrics ?? { revenuePerGridWeek: 0, costPerGridWeek: 0, netMarginPerGridWeek: 0, cycleWeeks: 0, marginPct: 0, seedCostPerCycle: 0 }
   return (
     <div style={{
       background: 'var(--color-bg-surface)',
@@ -144,14 +144,14 @@ function CropCard({ crop, isRecommended }: { crop: ComparisonCrop; isRecommended
           Revenue/grid-week
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)' }}>
-          ${m.revenuePerGridWeek.toFixed(2)}
+          ${(m.revenuePerGridWeek ?? 0).toFixed(2)}
         </div>
 
         <div style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', letterSpacing: '0.05em' }}>
           Cost/grid-week
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)' }}>
-          ${m.costPerGridWeek.toFixed(2)}
+          ${(m.costPerGridWeek ?? 0).toFixed(2)}
         </div>
 
         <div style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', letterSpacing: '0.05em' }}>
@@ -160,9 +160,9 @@ function CropCard({ crop, isRecommended }: { crop: ComparisonCrop; isRecommended
         <div style={{
           textAlign: 'right',
           fontFamily: 'var(--font-mono)',
-          color: m.netMarginPerGridWeek >= 0 ? 'var(--color-success)' : 'var(--color-error)',
+          color: (m.netMarginPerGridWeek ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-error)',
         }}>
-          ${m.netMarginPerGridWeek.toFixed(2)}
+          ${(m.netMarginPerGridWeek ?? 0).toFixed(2)}
         </div>
 
         <div style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', letterSpacing: '0.05em' }}>
@@ -178,16 +178,16 @@ function CropCard({ crop, isRecommended }: { crop: ComparisonCrop; isRecommended
         <div style={{
           textAlign: 'right',
           fontFamily: 'var(--font-mono)',
-          color: m.marginPct >= 0 ? 'var(--color-success)' : 'var(--color-error)',
+          color: (m.marginPct ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-error)',
         }}>
-          {m.marginPct.toFixed(1)}%
+          {(m.marginPct ?? 0).toFixed(1)}%
         </div>
 
         <div style={{ color: 'var(--color-text-secondary)', textTransform: 'uppercase', fontSize: 'var(--text-xs)', letterSpacing: '0.05em' }}>
           Seed cost/cycle
         </div>
         <div style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--color-text-primary)' }}>
-          ${m.seedCostPerCycle.toFixed(2)}
+          ${(m.seedCostPerCycle ?? 0).toFixed(2)}
         </div>
       </div>
     </div>
@@ -201,7 +201,7 @@ function buildRadarData(crops: ComparisonCrop[]) {
       dimension: dim.charAt(0).toUpperCase() + dim.slice(1),
     }
     for (const c of crops) {
-      entry[c.cropId] = c.radarScores[dim]
+      entry[c.cropId] = c.radarScores?.[dim] ?? 0
     }
     return entry
   })

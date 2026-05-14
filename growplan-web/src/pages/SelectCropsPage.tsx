@@ -86,7 +86,7 @@ export function SelectCropsPage({
             textTransform: 'uppercase',
           }}
         >
-          Step 2 of 3 &mdash; Select Crops
+          Step 2 of 5 &mdash; Select Crops
         </span>
         <span
           style={{

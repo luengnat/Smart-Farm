@@ -18,7 +18,7 @@ type ReplanPageProps = {
   generatedPlan: GeneratedPlanData | null
   farmId: number | null
   onBackToDashboard: () => void
-  onApplyPlan: (plan: GeneratedPlanData) => void
+  onApplyPlan: (plan: GeneratedPlanData, planId: number | null) => void
 }
 
 export function ReplanPage({
@@ -38,8 +38,13 @@ export function ReplanPage({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newPlan, setNewPlan] = useState<GeneratedPlanData | null>(null)
+  const [newPlanId, setNewPlanId] = useState<number | null>(null)
 
   const resolvedPlan = newPlan ?? generatedPlan
+
+  const planWeeks = resolvedPlan
+    ? (resolvedPlan.nurseryLoad?.length || Math.max(...(resolvedPlan.timelineRows ?? []).map((r) => r.harvestWeek), 8))
+    : 8
 
   const accountInitials =
     farm.farmName
@@ -60,6 +65,7 @@ export function ReplanPage({
     try {
       const result = await generatePlan({ farm, selectedCropIds, goalData }, farmId)
       setNewPlan(result.plan)
+      if (result.planId) setNewPlanId(result.planId)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Plan generation failed. Please try again.')
     } finally {
@@ -78,12 +84,14 @@ export function ReplanPage({
     )
   }
 
-  const timelineRows = resolvedPlan.timelineRows
-  const nurseryLoad = resolvedPlan.nurseryLoad
-  const peakNursery = nurseryLoad.reduce(
-    (peak, item) => (item.activeSeedlings > peak.activeSeedlings ? item : peak),
-    nurseryLoad[0] ?? { week: 1, activeSeedlings: 0, capacity: farm.nurseryCapacity, utilizationPercent: 0, risk: 'Low' as const },
-  )
+  const timelineRows = resolvedPlan.timelineRows ?? []
+  const nurseryLoad = resolvedPlan.nurseryLoad ?? []
+  const peakNursery = nurseryLoad.length > 0
+    ? nurseryLoad.reduce(
+        (peak, item) => (item.activeSeedlings > peak.activeSeedlings ? item : peak),
+        nurseryLoad[0],
+      )
+    : { week: 1, activeSeedlings: 0, capacity: farm.nurseryCapacity, utilizationPercent: 0, risk: 'Low' as const }
 
   return (
     <main className="setup-page">
@@ -110,7 +118,7 @@ export function ReplanPage({
               </span>
               <div>
                 <p>Current plan</p>
-                <strong>{resolvedPlan.utilizationPercent}% utilization, ${(resolvedPlan.expectedRevenue / 1000).toFixed(1)}k/wk revenue</strong>
+                <strong>{resolvedPlan.utilizationPercent}% utilization, ${((resolvedPlan.expectedRevenue ?? 0) / 1000).toFixed(1)}k/wk revenue</strong>
               </div>
             </div>
 
@@ -145,12 +153,12 @@ export function ReplanPage({
                   <div>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 0 }}>Previous</p>
                     <p style={{ margin: '2px 0' }}>{generatedPlan.utilizationPercent}% utilization</p>
-                    <p style={{ margin: 0 }}>${(generatedPlan.expectedRevenue / 1000).toFixed(1)}k/wk</p>
+                    <p style={{ margin: 0 }}>${((generatedPlan.expectedRevenue ?? 0) / 1000).toFixed(1)}k/wk</p>
                   </div>
                   <div>
                     <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', margin: 0 }}>New</p>
                     <p style={{ margin: '2px 0' }}>{newPlan.utilizationPercent}% utilization</p>
-                    <p style={{ margin: 0 }}>${(newPlan.expectedRevenue / 1000).toFixed(1)}k/wk</p>
+                    <p style={{ margin: 0 }}>${((newPlan.expectedRevenue ?? 0) / 1000).toFixed(1)}k/wk</p>
                   </div>
                 </div>
               </div>
@@ -159,12 +167,12 @@ export function ReplanPage({
             <StepActions
               onBack={onBackToDashboard}
               onNext={() => {
-                if (newPlan) onApplyPlan(newPlan)
+                if (newPlan) onApplyPlan(newPlan, newPlanId)
               }}
               backLabel="Back to Dashboard"
               nextLabel={newPlan ? 'Apply New Plan' : 'Regenerate Plan'}
               nextDisabled={!newPlan}
-              onNextClick={!newPlan ? handleRegenerate : undefined}
+              onNextDisabledAttempt={!newPlan ? handleRegenerate : undefined}
             />
           </section>
 
@@ -185,7 +193,7 @@ export function ReplanPage({
 
             <div
               className="generate-grid replan-grid"
-              style={{ gridTemplateColumns: `repeat(${resolvedPlan.columns}, minmax(0, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${resolvedPlan.columns || 1}, minmax(0, 1fr))` }}
             >
               {resolvedPlan.cells.map((cell, index) => (
                 <span
@@ -201,7 +209,7 @@ export function ReplanPage({
               <div className="mini-timeline replan-phase-timeline">
                 <h3>Schedule</h3>
                 <div className="replan-week-head">
-                  {nurseryLoad.slice(0, 8).map((item) => (
+                  {nurseryLoad.slice(0, planWeeks).map((item) => (
                     <span key={item.week}>W{item.week}</span>
                   ))}
                 </div>
@@ -224,7 +232,7 @@ export function ReplanPage({
               <div className="mini-timeline nursery-mini-timeline">
                 <h3>Nursery Load</h3>
                 <div className="mini-months">
-                  {nurseryLoad.slice(0, 8).map((item) => (
+                  {nurseryLoad.slice(0, planWeeks).map((item) => (
                     <span key={item.week}>W{item.week}</span>
                   ))}
                 </div>
@@ -232,7 +240,7 @@ export function ReplanPage({
                   <article className="mini-row nursery-load-row">
                     <small>Active</small>
                     <div className="mini-row-track">
-                      {nurseryLoad.slice(0, 8).map((item) => (
+                      {nurseryLoad.slice(0, planWeeks).map((item) => (
                         <span
                           key={item.week}
                           className={`nursery-load-bar risk-${item.risk.toLowerCase()}`}
@@ -257,7 +265,7 @@ export function ReplanPage({
               </article>
               <article>
                 <p>Revenue</p>
-                <strong>${(resolvedPlan.expectedRevenue / 1000).toFixed(1)}k</strong>
+                <strong>${((resolvedPlan.expectedRevenue ?? 0) / 1000).toFixed(1)}k</strong>
               </article>
               <article>
                 <p>Nursery peak</p>

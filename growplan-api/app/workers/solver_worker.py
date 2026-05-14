@@ -45,6 +45,7 @@ def run_solver(plan_id: int, db: Session | None = None) -> None:
         farm_dict = {
             "rows": farm.rows,
             "columns": farm.columns,
+            "levels": getattr(farm, "levels", 1) or 1,
             "nursery_tray_count": int(farm.nursery_tray_count),
             "nursery_tray_cells": int(farm.nursery_tray_cells),
             "nursery_buffer_pct": float(farm.nursery_buffer_pct),

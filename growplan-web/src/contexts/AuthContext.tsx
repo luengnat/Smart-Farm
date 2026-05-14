@@ -26,13 +26,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     setLoading(true)
+    let cancelled = false
     apiFetch<User>('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
-      .then((u) => setUser(u))
-      .catch(() => {
-        setToken(null)
-        sessionStorage.removeItem('gp_token')
+      .then((u) => {
+        if (!cancelled) setUser(u)
       })
-      .finally(() => setLoading(false))
+      .catch(() => {
+        // 401 is already handled by apiFetch (clears token + reloads).
+        // Do NOT clear token for transient network/server errors —
+        // the user should not be logged out due to a temporary blip.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [token])
 
   const login = useCallback(async (req: LoginRequest) => {

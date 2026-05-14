@@ -19,8 +19,7 @@ const planningOptions = ['4 weeks', '8 weeks', '12 weeks', '16 weeks']
 const GOAL_DECIMAL_STEP = 0.1
 
 const floorToGoalStep = (value: number) => {
-  const floored = Math.floor(value / GOAL_DECIMAL_STEP) * GOAL_DECIMAL_STEP
-  return Number(floored.toFixed(1))
+  return Number((Math.floor(value / GOAL_DECIMAL_STEP + 1e-9) * GOAL_DECIMAL_STEP).toFixed(1))
 }
 
 const roundToGoalStep = (value: number) => {
@@ -49,7 +48,7 @@ export function DefineGoalPage({
     () => new Map(selectedCrops.map((crop) => [crop.id, crop])),
     [selectedCrops],
   )
-  const availableCapacityPerWeek = useMemo(() => farm.rows * farm.columns, [farm.columns, farm.rows])
+  const availableCapacityPerWeek = useMemo(() => farm.rows * farm.columns * farm.levels, [farm.columns, farm.rows, farm.levels])
 
   const optimizationLabel = useMemo(() => {
     return priority === 'maximize-space' ? 'Maximize space utilization' : 'Minimize stockout risk'
@@ -73,7 +72,7 @@ export function DefineGoalPage({
       const target = cropGoals[crop.id]?.targetPerWeek ?? 0
       const reserve = cropGoals[crop.id]?.reservePercent ?? 0
       const targetWithReserve = target * (1 + reserve / 100)
-      return total + targetWithReserve / crop.yieldPerGrid
+      return total + targetWithReserve / (crop.yieldPerGrid || 1)
     }, 0)
     return {
       availableCapacityPerWeek,
@@ -97,8 +96,8 @@ export function DefineGoalPage({
     return selectedCrops.some((crop) => {
       const target = cropGoals[crop.id]?.targetPerWeek ?? 0
       const reserve = cropGoals[crop.id]?.reservePercent ?? 0
-      const targetStepGrid = (GOAL_DECIMAL_STEP * (1 + reserve / 100)) / crop.yieldPerGrid
-      const reserveStepGrid = target > 0 ? (target * 0.01) / crop.yieldPerGrid : Number.POSITIVE_INFINITY
+      const targetStepGrid = (GOAL_DECIMAL_STEP * (1 + reserve / 100)) / (crop.yieldPerGrid || 1)
+      const reserveStepGrid = target > 0 ? (target * 0.01) / (crop.yieldPerGrid || 1) : Number.POSITIVE_INFINITY
 
       const canIncreaseTarget = targetStepGrid <= capacityGap + epsilon
       const canIncreaseReserve = reserve < 50 && reserveStepGrid <= capacityGap + epsilon
@@ -183,7 +182,7 @@ export function DefineGoalPage({
       if (selectedCrop.id === cropId) return total
       const target = goals[selectedCrop.id]?.targetPerWeek ?? 0
       const selectedReserve = goals[selectedCrop.id]?.reservePercent ?? 0
-      return total + (target * (1 + selectedReserve / 100)) / selectedCrop.yieldPerGrid
+      return total + (target * (1 + selectedReserve / 100)) / (selectedCrop.yieldPerGrid || 1)
     }, 0)
 
     const remainingCapacity = Math.max(0, availableCapacityPerWeek - requiredWithoutCrop)
@@ -201,7 +200,7 @@ export function DefineGoalPage({
       if (selectedCrop.id === cropId) return total
       const selectedTarget = goals[selectedCrop.id]?.targetPerWeek ?? 0
       const selectedReserve = goals[selectedCrop.id]?.reservePercent ?? 0
-      return total + (selectedTarget * (1 + selectedReserve / 100)) / selectedCrop.yieldPerGrid
+      return total + (selectedTarget * (1 + selectedReserve / 100)) / (selectedCrop.yieldPerGrid || 1)
     }, 0)
 
     const remainingCapacity = Math.max(0, availableCapacityPerWeek - requiredWithoutCrop)
@@ -337,7 +336,7 @@ export function DefineGoalPage({
                         <div className="goal-input-row">
                           <label>
                             <span className="goal-slider-head">
-                              Goal / week
+                              Min. production / week
                               <strong>{config.targetPerWeek.toFixed(1)} kg</strong>
                             </span>
                             <input
@@ -352,7 +351,7 @@ export function DefineGoalPage({
                             />
                             <span className="goal-slider-scale">
                               <small>0 kg</small>
-                              <small>Available {remainingMaxTarget.toFixed(1)} kg/week</small>
+                              <small>Max feasible {remainingMaxTarget.toFixed(1)} kg/week</small>
                             </span>
                           </label>
                           <label>
@@ -447,9 +446,9 @@ export function DefineGoalPage({
               <article>
                 <Goal size={22} />
                 <div>
-                  <p>Total target</p>
+                  <p>Total commitment</p>
                   <strong>{totalTargetPerWeek.toFixed(1)} kg / week</strong>
-                  <small>Across {selectedCrops.length} selected crops</small>
+                  <small>Minimum across {selectedCrops.length} crops</small>
                 </div>
               </article>
               <article>

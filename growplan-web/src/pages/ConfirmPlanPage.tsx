@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CalendarDays,
@@ -23,7 +23,7 @@ type ConfirmPlanPageProps = {
   goalData: GoalData
   generatedPlan: GeneratedPlanData | null
   onBackToGenerate: () => void
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }
 
 export function ConfirmPlanPage({
@@ -32,18 +32,34 @@ export function ConfirmPlanPage({
   onBackToGenerate,
   onConfirm,
 }: ConfirmPlanPageProps) {
-  if (!generatedPlan) {
-    return (
-      <div style={{ padding: 'var(--space-8)', color: 'var(--color-text-secondary)' }}>
-        No plan data available. Go back to generate a plan first.
-      </div>
-    )
-  }
+  const [confirming, setConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+
+  // All hooks before conditional returns (React Rules of Hooks)
   const resolvedPlan = generatedPlan
 
+  const handleConfirm = async () => {
+    setConfirming(true)
+    setConfirmError(null)
+    try {
+      await onConfirm()
+    } catch (err) {
+      setConfirmError(err instanceof Error ? err.message : 'Confirmation failed')
+      setConfirming(false)
+    }
+  }
+
+  const planWeeks = resolvedPlan
+    ? (resolvedPlan.nurseryLoad?.length || Math.max(...(resolvedPlan.timelineRows ?? []).map((r) => r.harvestWeek), 8))
+    : 8
+
   const timelineRows = useMemo(() => {
-    return resolvedPlan.timelineRows
-  }, [resolvedPlan.timelineRows])
+    return resolvedPlan?.timelineRows ?? []
+  }, [resolvedPlan?.timelineRows])
+
+  const nurseryLoad = useMemo(() => {
+    return resolvedPlan?.nurseryLoad ?? []
+  }, [resolvedPlan?.nurseryLoad])
 
   const accountInitials =
     farm.farmName
@@ -53,6 +69,14 @@ export function ConfirmPlanPage({
       .map((part) => part[0]?.toUpperCase() ?? '')
       .join('')
       .slice(0, 2) || 'GF'
+
+  if (!resolvedPlan) {
+    return (
+      <div style={{ padding: 'var(--space-8)', color: 'var(--color-text-secondary)' }}>
+        No plan data available. Go back to generate a plan first.
+      </div>
+    )
+  }
 
   return (
     <main className="setup-page">
@@ -68,6 +92,13 @@ export function ConfirmPlanPage({
               <p>Review your AI-generated plan and confirm to get started.</p>
             </header>
 
+            {confirmError && (
+              <div style={{ padding: 'var(--space-3)', background: 'var(--color-error-bg, #fef2f2)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', color: 'var(--color-error, #ef4444)' }}>
+                <AlertTriangle size={16} />
+                {confirmError}
+              </div>
+            )}
+
             <div className="confirm-kpis">
               <article>
                 <span className="kpi-icon ok">
@@ -81,7 +112,7 @@ export function ConfirmPlanPage({
                   <Leaf size={18} />
                 </span>
                 <p>Expected revenue</p>
-                <strong>${(resolvedPlan.expectedRevenue / 1000).toFixed(1)}k</strong>
+                <strong>${((resolvedPlan.expectedRevenue ?? 0) / 1000).toFixed(1)}k</strong>
               </article>
               <article>
                 <span className="kpi-icon safe">
@@ -103,11 +134,11 @@ export function ConfirmPlanPage({
               <section className="confirm-grid-card">
                 <header>
                   <h2>Farm Grid</h2>
-                  <span>{resolvedPlan.rows} x {resolvedPlan.columns}</span>
+                  <span>{resolvedPlan.rows || 0} x {resolvedPlan.columns || 0}</span>
                 </header>
                 <div
                   className="confirm-grid"
-                  style={{ gridTemplateColumns: `repeat(${resolvedPlan.columns}, minmax(0, 1fr))` }}
+                  style={{ gridTemplateColumns: `repeat(${resolvedPlan.columns || 1}, minmax(0, 1fr))` }}
                 >
                   {resolvedPlan.cells.map((cell, index) => (
                     <span key={index} style={{ backgroundColor: cell.color }} title={cell.label}>
@@ -119,13 +150,13 @@ export function ConfirmPlanPage({
 
               <section className="confirm-timeline-card">
                 <header>
-                  <h2>8-Week Plan</h2>
+                  <h2>{planWeeks}-Week Plan</h2>
                   <CalendarDays size={16} />
                 </header>
                 <div className="confirm-timeline-table">
                   <div className="timeline-head">
                     <span>Crop</span>
-                    {Array.from({ length: 8 }, (_, i) => (
+                    {Array.from({ length: planWeeks }, (_, i) => (
                       <b key={i}>W{i + 1}</b>
                     ))}
                   </div>
@@ -174,14 +205,14 @@ export function ConfirmPlanPage({
                   <div className="confirm-timeline-table nursery-load-table">
                     <div className="timeline-head nursery-load-head">
                       <span>Week</span>
-                      {resolvedPlan.nurseryLoad.slice(0, 8).map((item) => (
+                      {nurseryLoad.slice(0, planWeeks).map((item) => (
                         <b key={item.week}>W{item.week}</b>
                       ))}
                     </div>
                     <div className="timeline-row-confirm nursery-load-row-confirm">
                       <span>Load</span>
                       <div className="timeline-track-confirm nursery-track-confirm">
-                        {resolvedPlan.nurseryLoad.slice(0, 8).map((item) => (
+                        {nurseryLoad.slice(0, planWeeks).map((item) => (
                           <i
                             key={item.week}
                             className={`risk-${item.risk.toLowerCase()}`}
@@ -245,9 +276,11 @@ export function ConfirmPlanPage({
 
             <StepActions
               onBack={onBackToGenerate}
-              onNext={onConfirm}
+              onNext={handleConfirm}
               backLabel="Back"
-              nextLabel="Confirm & Start"
+              nextLabel={confirming ? 'Confirming...' : 'Confirm & Start'}
+              nextDisabled={confirming}
+              nextLoading={confirming}
             />
           </aside>
         </section>

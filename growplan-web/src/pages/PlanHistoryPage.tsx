@@ -54,7 +54,7 @@ export function PlanHistoryPage({ planId, onBack }: Props) {
         <h2 style={{ margin: 0, color: 'var(--color-text-primary)' }}>Plan History</h2>
         {data && (
           <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
-            {data.total} snapshots
+            {data.total ?? 0} snapshots
           </span>
         )}
       </div>
@@ -65,13 +65,13 @@ export function PlanHistoryPage({ planId, onBack }: Props) {
         </p>
       )}
 
-      {data && data.snapshots.length === 0 && (
+      {data && (data.snapshots ?? []).length === 0 && (
         <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', marginTop: '2rem' }}>
           No snapshots yet. Confirm or advance a plan to create history entries.
         </p>
       )}
 
-      {data && data.snapshots.length > 0 && (
+      {data && (data.snapshots ?? []).length > 0 && (
         <div style={{ position: 'relative', paddingLeft: '2rem' }}>
           {/* Vertical line */}
           <div style={{
@@ -97,9 +97,11 @@ function SnapshotEntry({ snapshot }: { snapshot: SnapshotSummary }) {
     color: 'var(--color-text-secondary)',
     icon: '?',
   }
-  const date = new Date(snapshot.createdAt)
-  const timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    + ' ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  const date = snapshot.createdAt ? new Date(snapshot.createdAt) : null
+  const timeStr = date && !isNaN(date.getTime())
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      + ' ' + date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    : 'Pending'
 
   return (
     <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
@@ -152,7 +154,7 @@ function SnapshotEntry({ snapshot }: { snapshot: SnapshotSummary }) {
           <span>{snapshot.totalGrids} grids</span>
           <span>{snapshot.cropCount} crops</span>
           <span style={{ fontFamily: 'var(--font-mono)' }}>
-            ${snapshot.revenuePerWeek.toFixed(2)}/wk
+            ${(snapshot.revenuePerWeek ?? 0).toFixed(2)}/wk
           </span>
         </div>
       </div>

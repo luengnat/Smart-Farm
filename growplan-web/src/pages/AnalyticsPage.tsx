@@ -107,7 +107,7 @@ export function AnalyticsPage({ planId, onBack }: Props) {
 
 function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
   const cropColors = Object.fromEntries(cropLibrary.map(c => [c.id, c.accent]))
-  const cropIds = Object.keys(analytics.revenueByWeek[0] || {}).filter(k => k !== 'week' && k !== 'total')
+  const cropIds = Object.keys(analytics.revenueByWeek?.[0] ?? {}).filter(k => k !== 'week' && k !== 'total')
 
   return (
     <div>
@@ -161,13 +161,13 @@ function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
         <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Cumulative Revenue
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--color-text-primary)', marginTop: '0.25rem' }}>
-            ${analytics.cumulativeRevenue.toFixed(2)}
+            ${(analytics.cumulativeRevenue ?? 0).toFixed(2)}
           </div>
         </div>
         <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Cumulative Cost
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.1rem', color: 'var(--color-text-primary)', marginTop: '0.25rem' }}>
-            ${analytics.cumulativeCost.toFixed(2)}
+            ${(analytics.cumulativeCost ?? 0).toFixed(2)}
           </div>
         </div>
         <div style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -176,9 +176,9 @@ function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
             fontFamily: 'var(--font-mono)',
             fontSize: '1.1rem',
             marginTop: '0.25rem',
-            color: analytics.cumulativeProfit >= 0 ? 'var(--color-success)' : 'var(--color-error)',
+            color: (analytics.cumulativeProfit ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-error)',
           }}>
-            ${analytics.cumulativeProfit.toFixed(2)}
+            ${(analytics.cumulativeProfit ?? 0).toFixed(2)}
           </div>
         </div>
       </div>
@@ -187,17 +187,20 @@ function RevenueCostTab({ analytics }: { analytics: AnalyticsData }) {
 }
 
 function TimelineTab({ timeline }: { timeline: TimelineData }) {
+  const crops = timeline.crops ?? []
+  const horizonWeeks = timeline.horizonWeeks ?? 8
+  const currentWeek = timeline.currentWeek ?? 1
   return (
     <div>
       <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '1rem' }}>Crop Timeline</h3>
       <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-        Current week: <span style={{ fontFamily: 'var(--font-mono)' }}>{timeline.currentWeek}</span>
-        {' | '}Horizon: <span style={{ fontFamily: 'var(--font-mono)' }}>{timeline.horizonWeeks}</span> weeks
+        Current week: <span style={{ fontFamily: 'var(--font-mono)' }}>{currentWeek}</span>
+        {' | '}Horizon: <span style={{ fontFamily: 'var(--font-mono)' }}>{horizonWeeks}</span> weeks
       </p>
       <div style={{ position: 'relative', overflowX: 'auto' }}>
-        <svg width={timeline.horizonWeeks * 40 + 60} height={timeline.crops.length * 60 + 40}>
+        <svg width={horizonWeeks * 40 + 60} height={crops.length * 60 + 40}>
           {/* Week headers */}
-          {Array.from({ length: timeline.horizonWeeks }, (_, i) => (
+          {Array.from({ length: horizonWeeks }, (_, i) => (
             <text
               key={i}
               x={i * 40 + 60}
@@ -212,19 +215,19 @@ function TimelineTab({ timeline }: { timeline: TimelineData }) {
           ))}
           {/* Current week line */}
           <line
-            x1={(timeline.currentWeek - 1) * 40 + 60}
-            x2={(timeline.currentWeek - 1) * 40 + 60}
+            x1={(currentWeek - 1) * 40 + 60}
+            x2={(currentWeek - 1) * 40 + 60}
             y1={20}
-            y2={timeline.crops.length * 60 + 30}
+            y2={crops.length * 60 + 30}
             stroke="var(--color-error)"
             strokeWidth={2}
             strokeDasharray="4 2"
           />
           {/* Crop bars */}
-          {timeline.crops.map((crop, ci) => (
+          {crops.map((crop, ci) => (
             <g key={crop.cropId} transform={`translate(0, ${ci * 60 + 30})`}>
               <text x={0} y={15} fontSize={11} fill="var(--color-text-primary)">{crop.cropName}</text>
-              {crop.intervals.map((interval, ii) => (
+              {(crop.intervals ?? []).map((interval, ii) => (
                 <rect
                   key={ii}
                   x={(interval.startWeek - 1) * 40 + 60}
@@ -245,13 +248,14 @@ function TimelineTab({ timeline }: { timeline: TimelineData }) {
 }
 
 function ProfitabilityTab({ analytics }: { analytics: AnalyticsData }) {
-  const finalMargin = analytics.profitByWeek[analytics.profitByWeek.length - 1]?.margin || 0
+  const profitByWeek = analytics.profitByWeek ?? []
+  const finalMargin = profitByWeek[profitByWeek.length - 1]?.margin || 0
 
   return (
     <div>
       <h3 style={{ color: 'var(--color-text-primary)', marginBottom: '1rem' }}>Weekly Profitability</h3>
       <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={analytics.profitByWeek}>
+        <BarChart data={profitByWeek}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
           <XAxis dataKey="week" tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />
           <YAxis tick={DARK_AXIS_TICK} axisLine={DARK_AXIS_LINE} />

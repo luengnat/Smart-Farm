@@ -1,7 +1,25 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { cropLibrary, type CropId } from '../constants/crops'
-import type { GeneratedPlanData, GoalData, SetupFarmData } from '../types/planning'
+import type { CellPhase, GeneratedPlanData, GoalData, SetupFarmData } from '../types/planning'
 import { Metric } from '../components/Metric'
+
+function computePhase(currentWeek: number, weekStarted: number, weekHarvest: number, status: string, nurseryLeadWeeks = 2): CellPhase {
+  if (status === 'empty') return 'empty'
+  if (status === 'harvested') return 'harvested'
+  if (weekHarvest > 0 && currentWeek >= weekHarvest) return 'harvestable'
+  if (weekStarted > 0 && currentWeek >= weekStarted) return 'growing'
+  if (weekStarted > 0 && currentWeek >= weekStarted - nurseryLeadWeeks) return 'seeded'
+  return 'planned'
+}
+
+const PHASE_STYLE: Record<CellPhase, React.CSSProperties> = {
+  empty: { opacity: 0.08, border: '1px solid rgba(255,255,255,0.04)' },
+  planned: { opacity: 0.4, border: '1px dashed rgba(255,255,255,0.15)' },
+  seeded: { opacity: 0.6, border: '1px solid rgba(255,255,255,0.2)', background: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.06) 3px, rgba(255,255,255,0.06) 6px)' },
+  growing: { opacity: 1, border: '1px solid rgba(255,255,255,0.06)' },
+  harvestable: { opacity: 1, border: '2px solid rgba(34, 197, 94, 0.7)', boxShadow: '0 0 4px rgba(34, 197, 94, 0.3)' },
+  harvested: { opacity: 0.3, border: '1px solid rgba(255,255,255,0.06)', filter: 'grayscale(0.6)' },
+}
 
 type DashboardPageProps = {
   farm: SetupFarmData
@@ -45,6 +63,116 @@ export function DashboardPage({
   )
 
   const resolvedPlan = generatedPlan
+  const farmLevels = resolvedPlan?.levels || 1
+  const [selectedLevel, setSelectedLevel] = useState(0)
+
+  // All hooks before conditional return (React Rules of Hooks)
+  const totalRevenue = useMemo(() => {
+    if (!resolvedPlan) return 0
+    if (resolvedPlan.expectedRevenue > 0) return resolvedPlan.expectedRevenue
+    return resolvedPlan.cropSummaries.reduce((sum, cs) => {
+      const crop = cropLibrary.find((c) => c.id === cs.cropId)
+      const price = crop?.pricePerKg ?? 0
+      return sum + cs.targetPerWeek * price
+    }, 0)
+  }, [resolvedPlan])
+
+  const gridCells = useMemo(() => {
+    if (!resolvedPlan) return []
+    const currentWeek = resolvedPlan.currentWeek ?? 1
+    const planRows = resolvedPlan.rows || 1
+    const planCols = resolvedPlan.columns || 1
+    const cellsPerLevel = planRows * planCols
+    return resolvedPlan.cells.map((cell, idx) => {
+      const crop = cropLibrary.find((item) => item.id === cell.cropId)
+      const cellLevel = farmLevels > 1 ? Math.floor(idx / cellsPerLevel) : 0
+      const phase = computePhase(currentWeek, cell.weekStarted, cell.weekHarvestExpected, cell.status, crop?.nurseryLeadWeeks)
+      return {
+        cropId: cell.cropId,
+        name: cell.label,
+        color: cell.color,
+        category: crop?.category ?? 'Leafy Green',
+        level: cellLevel,
+        phase,
+        weekStarted: cell.weekStarted,
+        weekHarvestExpected: cell.weekHarvestExpected,
+      }
+    })
+  }, [resolvedPlan, farmLevels])
+
+  const levelCells = useMemo(() => {
+    if (!resolvedPlan || farmLevels <= 1) return gridCells
+    const cols = resolvedPlan.columns || 1
+    const rows = resolvedPlan.rows || 1
+    const cellsPerLevel = rows * cols
+    return gridCells.filter((_, idx) => {
+      const cellLevel = Math.floor(idx / cellsPerLevel)
+      return cellLevel === selectedLevel
+    })
+  }, [gridCells, resolvedPlan, farmLevels, selectedLevel])
+
+  const gridCols = resolvedPlan?.columns || 1
+
+  const cropMix = useMemo(() => {
+    if (!resolvedPlan) return []
+    const cells = farmLevels > 1 ? levelCells : gridCells
+    const assigned = cells.filter((c) => c.phase !== 'empty')
+    const total = assigned.length
+    return selectedCrops.map((crop) => {
+      const count = assigned.filter((cell) => cell.cropId === crop.id).length
+      return {
+        id: crop.id,
+        name: crop.name,
+        color: crop.accent,
+        count,
+        percent: total > 0 ? Math.round((count / total) * 100) : 0,
+      }
+    })
+  }, [gridCells, levelCells, farmLevels, selectedCrops, resolvedPlan])
+
+  const currentPlanWeek = resolvedPlan?.currentWeek ?? 1
+  const nextSeedBatch = useMemo(() => {
+    if (!resolvedPlan) return 0
+    return (resolvedPlan.nurserySchedule ?? [])
+      .filter((batch) => batch.seedWeek === currentPlanWeek)
+      .reduce((sum, batch) => sum + batch.seedlings, 0)
+  }, [currentPlanWeek, resolvedPlan])
+
+  const readyToTransplant = useMemo(() => {
+    if (!resolvedPlan) return 0
+    return (resolvedPlan.nurserySchedule ?? [])
+      .filter((batch) => batch.transplantWeek === currentPlanWeek)
+      .reduce((sum, batch) => sum + batch.seedlings, 0)
+  }, [currentPlanWeek, resolvedPlan])
+
+  const peakNurseryLoad = useMemo(() => {
+    const fallback = { week: 1, activeSeedlings: 0, capacity: farm.nurseryCapacity, utilizationPercent: 0, risk: 'Low' as const }
+    if (!resolvedPlan) return fallback
+    const load = resolvedPlan.nurseryLoad ?? []
+    if (load.length === 0) return fallback
+    return load.reduce(
+      (peak, item) => (item.activeSeedlings > peak.activeSeedlings ? item : peak),
+      load[0],
+    )
+  }, [farm.nurseryCapacity, resolvedPlan])
+
+  const planWeeks = useMemo(() => {
+    if (!resolvedPlan) return 8
+    const nurseryWeeks = resolvedPlan.nurseryLoad?.length ?? 0
+    if (nurseryWeeks > 0) return nurseryWeeks
+    const maxHarvest = Math.max(...(resolvedPlan.timelineRows ?? []).map((r) => r.harvestWeek), 8)
+    return maxHarvest
+  }, [resolvedPlan])
+
+  const nurseryLoadWeeks = useMemo(() => {
+    if (!resolvedPlan) return []
+    return (resolvedPlan.nurseryLoad ?? []).slice(0, planWeeks)
+  }, [resolvedPlan, planWeeks])
+
+  const timelineRows = useMemo(() => {
+    if (!resolvedPlan) return []
+    return resolvedPlan.timelineRows ?? []
+  }, [resolvedPlan])
 
   if (!resolvedPlan) {
     return (
@@ -57,78 +185,9 @@ export function DashboardPage({
     )
   }
 
-  // --- Revenue computation ---
-  const totalRevenue = useMemo(() => {
-    if (resolvedPlan.expectedRevenue > 0) return resolvedPlan.expectedRevenue
-    return resolvedPlan.cropSummaries.reduce((sum, cs) => {
-      const crop = cropLibrary.find((c) => c.id === cs.cropId)
-      const price = crop?.pricePerKg ?? 0
-      return sum + cs.targetPerWeek * price
-    }, 0)
-  }, [resolvedPlan.cropSummaries, resolvedPlan.expectedRevenue])
-
+  // Derived values (not hooks — safe after conditional return)
   const revenuePerWeek = totalRevenue
-  const activeCrops = resolvedPlan.cropSummaries.filter((cs) => cs.allocatedCells > 0).length
-
-  // --- Grid cells ---
-  const gridCells = useMemo(() => {
-    return resolvedPlan.cells.map((cell) => {
-      const crop = cropLibrary.find((item) => item.id === cell.cropId)
-      return {
-        cropId: cell.cropId,
-        name: cell.label,
-        color: cell.color,
-        category: crop?.category ?? 'Leafy Green',
-      }
-    })
-  }, [resolvedPlan.cells])
-
-  // --- Crop mix ---
-  const cropMix = useMemo(() => {
-    const total = gridCells.length
-    return selectedCrops.map((crop) => {
-      const count = gridCells.filter((cell) => cell.cropId === crop.id).length
-      return {
-        id: crop.id,
-        name: crop.name,
-        color: crop.accent,
-        count,
-        percent: total > 0 ? Math.round((count / total) * 100) : 0,
-      }
-    })
-  }, [gridCells, selectedCrops])
-
-  // --- Nursery ---
-  const nextSeedWeek = resolvedPlan.nurseryLoad[0]?.week ?? 1
-  const nextSeedBatch = useMemo(() => {
-    return resolvedPlan.nurserySchedule
-      .filter((batch) => batch.seedWeek === nextSeedWeek)
-      .reduce((sum, batch) => sum + batch.seedlings, 0)
-  }, [nextSeedWeek, resolvedPlan.nurserySchedule])
-
-  const readyToTransplant = useMemo(() => {
-    return resolvedPlan.nurserySchedule
-      .filter((batch) => batch.transplantWeek === nextSeedWeek)
-      .reduce((sum, batch) => sum + batch.seedlings, 0)
-  }, [nextSeedWeek, resolvedPlan.nurserySchedule])
-
-  const peakNurseryLoad = useMemo(() => {
-    return resolvedPlan.nurseryLoad.reduce(
-      (peak, item) => (item.activeSeedlings > peak.activeSeedlings ? item : peak),
-      resolvedPlan.nurseryLoad[0] ?? {
-        week: 1,
-        activeSeedlings: 0,
-        capacity: farm.nurseryCapacity,
-        utilizationPercent: 0,
-        risk: 'Low' as const,
-      },
-    )
-  }, [farm.nurseryCapacity, resolvedPlan.nurseryLoad])
-
-  const nurseryLoadWeeks = useMemo(
-    () => resolvedPlan.nurseryLoad.slice(0, 8),
-    [resolvedPlan.nurseryLoad],
-  )
+  const activeCrops = (resolvedPlan.cropSummaries ?? []).filter((cs) => cs.allocatedCells > 0).length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -154,12 +213,94 @@ export function DashboardPage({
         </div>
         <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
           <Metric
-            value="Active"
+            value={`Week ${resolvedPlan.currentWeek ?? 1}`}
             label="Plan Status"
             positive
           />
         </div>
       </div>
+
+      {/* ── Today's briefing ── */}
+      {(() => {
+        const currentWeek = resolvedPlan.currentWeek ?? 1
+        const activeCells = gridCells.filter((c) => c.phase !== 'empty')
+        const harvestable = activeCells.filter((c) => c.phase === 'harvestable')
+        const seeded = activeCells.filter((c) => c.phase === 'seeded')
+        const toSeed = activeCells.filter((c) => {
+          if (c.phase !== 'seeded') return false
+          if (c.weekStarted <= 0) return false
+          const crop = cropLibrary.find((cr) => cr.id === c.cropId)
+          const leadWeeks = crop?.nurseryLeadWeeks ?? 2
+          return c.weekStarted - leadWeeks === currentWeek
+        })
+        const growing = activeCells.filter((c) => c.phase === 'growing').length
+
+        // Estimate harvest kg by crop
+        const harvestKgByCrop = new Map<string, { count: number; kg: number }>()
+        for (const cell of harvestable) {
+          const crop = cropLibrary.find((cr) => cr.id === cell.cropId)
+          const existing = harvestKgByCrop.get(cell.cropId) ?? { count: 0, kg: 0 }
+          harvestKgByCrop.set(cell.cropId, {
+            count: existing.count + 1,
+            kg: existing.kg + (crop?.yieldPerGrid ?? 0),
+          })
+        }
+
+        const hasTasks = harvestable.length > 0 || seeded.length > 0 || toSeed.length > 0
+        if (!hasTasks) return null
+
+        return (
+          <div style={{ ...SURFACE, padding: '1rem 1.25rem' }}>
+            <h2 style={{ ...LABEL, margin: '0 0 0.75rem', color: 'var(--color-text-primary)' }}>
+              Week {currentWeek} Briefing
+            </h2>
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              {harvestable.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'rgba(34, 197, 94, 1)' }}>
+                    Harvest {harvestable.length} cells
+                  </span>
+                  {Array.from(harvestKgByCrop.entries()).map(([cropId, { count, kg }]) => {
+                    const crop = cropLibrary.find((cr) => cr.id === cropId)
+                    return (
+                      <span key={cropId} style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', paddingLeft: '0.5rem' }}>
+                        {crop?.name ?? cropId}: {count} grids, ~{kg.toFixed(1)} kg
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+              {seeded.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                    Transplant {seeded.length} cells
+                  </span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', paddingLeft: '0.5rem' }}>
+                    Seedlings ready from nursery
+                  </span>
+                </div>
+              )}
+              {toSeed.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                    Seed {toSeed.length} cells
+                  </span>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', paddingLeft: '0.5rem' }}>
+                    Start in nursery this week
+                  </span>
+                </div>
+              )}
+              {growing > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                    {growing} cells growing
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Middle row: Farm Grid | Crop Mix + Nursery ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -168,29 +309,74 @@ export function DashboardPage({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <h2 style={{ ...LABEL, margin: 0, color: 'var(--color-text-primary)' }}>Farm Grid</h2>
             <span style={{ ...MONO, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              {resolvedPlan.rows} x {resolvedPlan.columns}
+              {resolvedPlan.rows} x {resolvedPlan.columns} x {farmLevels}
             </span>
           </div>
+          {farmLevels > 1 && (
+            <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.75rem' }}>
+              {Array.from({ length: farmLevels }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setSelectedLevel(i)}
+                  style={{
+                    padding: '0.25rem 0.625rem',
+                    fontSize: 'var(--text-xs)',
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: selectedLevel === i ? 600 : 400,
+                    color: selectedLevel === i ? 'var(--color-text-primary)' : 'var(--color-text-muted)',
+                    background: selectedLevel === i ? 'var(--color-bg-elevated)' : 'transparent',
+                    border: `1px solid ${selectedLevel === i ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  L{i + 1}
+                </button>
+              ))}
+            </div>
+          )}
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${resolvedPlan.columns}, 26px)`,
+              gridTemplateColumns: `repeat(${gridCols}, 26px)`,
               gap: '2px',
               justifyContent: 'center',
             }}
           >
-            {gridCells.map((cell, idx) => (
+            {levelCells.map((cell, idx) => (
               <span
                 key={idx}
-                title={cell.name}
+                title={`${cell.name} (${cell.phase}) — W${cell.weekStarted}→W${cell.weekHarvestExpected}`}
                 style={{
                   width: 26,
                   height: 26,
                   borderRadius: 3,
                   backgroundColor: cell.color,
-                  border: '1px solid rgba(255,255,255,0.06)',
+                  ...PHASE_STYLE[cell.phase],
                 }}
               />
+            ))}
+          </div>
+          {/* Phase legend */}
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', justifyContent: 'center' }}>
+            {([
+              ['empty', 'Empty', 'dim'],
+              ['planned', 'Planned', 'dashed'],
+              ['seeded', 'Seeded', 'striped'],
+              ['growing', 'Growing', 'solid'],
+              ['harvestable', 'Harvest', 'glow'],
+              ['harvested', 'Done', 'faded'],
+            ] as const).map(([phase, label, _]) => (
+              <span key={phase} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <span style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  backgroundColor: 'var(--color-text-muted)',
+                  ...PHASE_STYLE[phase as CellPhase],
+                }} />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>{label}</span>
+              </span>
             ))}
           </div>
         </div>
@@ -251,7 +437,7 @@ export function DashboardPage({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>Next seeding batch</span>
                 <span style={{ ...MONO, fontSize: 'var(--text-sm)', color: 'var(--color-text-primary)' }}>
-                  W{nextSeedWeek} &middot; {nextSeedBatch} seedlings
+                  W{currentPlanWeek} &middot; {nextSeedBatch} seedlings
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -273,19 +459,19 @@ export function DashboardPage({
 
       {/* ── Bottom: 8-Week Plan Timeline ── */}
       <div style={{ ...SURFACE, padding: '1.25rem' }}>
-        <h2 style={{ ...LABEL, margin: '0 0 0.75rem', color: 'var(--color-text-primary)' }}>8-Week Plan</h2>
+        <h2 style={{ ...LABEL, margin: '0 0 0.75rem', color: 'var(--color-text-primary)' }}>{planWeeks}-Week Plan</h2>
 
         {/* Week header */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: `80px repeat(8, 1fr)`,
+            gridTemplateColumns: `80px repeat(${planWeeks}, 1fr)`,
             gap: '2px',
             marginBottom: '4px',
           }}
         >
           <span />
-          {Array.from({ length: 8 }, (_, i) => (
+          {Array.from({ length: planWeeks }, (_, i) => (
             <span
               key={i}
               style={{
@@ -301,14 +487,12 @@ export function DashboardPage({
         </div>
 
         {/* Timeline rows */}
-        {resolvedPlan.timelineRows.map((row) => (
+        {timelineRows.map((row) => (
           <div
             key={row.cropId}
             style={{
               display: 'grid',
-              gridTemplateColumns: `80px repeat(8, 1fr)`,
-              gap: '2px',
-              marginBottom: '2px',
+              gridTemplateColumns: `80px repeat(${planWeeks}, 1fr)`,
             }}
           >
             <span
@@ -324,7 +508,7 @@ export function DashboardPage({
             >
               {row.label}
             </span>
-            {Array.from({ length: 8 }, (_, weekIdx) => {
+            {Array.from({ length: planWeeks }, (_, weekIdx) => {
               const week = weekIdx + 1
               let bg = 'transparent'
               let label = ''
@@ -365,9 +549,7 @@ export function DashboardPage({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: `80px repeat(8, 1fr)`,
-            gap: '2px',
-            marginTop: '8px',
+            gridTemplateColumns: `80px repeat(${planWeeks}, 1fr)`,
             paddingTop: '8px',
             borderTop: '1px solid var(--color-border)',
           }}

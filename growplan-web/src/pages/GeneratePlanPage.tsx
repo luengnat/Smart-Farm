@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LoaderCircle, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react'
 import { cropLibrary, type CropId } from '../constants/crops'
 import { generatePlan, saveFarm } from '../lib/api'
@@ -34,6 +34,15 @@ export function GeneratePlanPage({
   const [status, setStatus] = useState<GenStatus>(generatedPlan ? 'done' : 'saving-farm')
   const [errorMessage, setErrorMessage] = useState('')
 
+  // Stabilize callbacks via refs so the effect only re-runs on data changes,
+  // not on parent re-renders that create new arrow function references.
+  const onFarmCreatedRef = useRef(onFarmCreated)
+  const onPlanCreatedRef = useRef(onPlanCreated)
+  const onGeneratePlanRef = useRef(onGeneratePlan)
+  onFarmCreatedRef.current = onFarmCreated
+  onPlanCreatedRef.current = onPlanCreated
+  onGeneratePlanRef.current = onGeneratePlan
+
   useEffect(() => {
     if (generatedPlan) return
 
@@ -47,7 +56,7 @@ export function GeneratePlanPage({
           setStatus('saving-farm')
           const result = await saveFarm(farm)
           currentFarmId = result.id
-          onFarmCreated(result.id)
+          onFarmCreatedRef.current(result.id)
         }
 
         if (cancelled) return
@@ -60,9 +69,9 @@ export function GeneratePlanPage({
         if (cancelled) return
 
         if (planId) {
-          onPlanCreated(planId)
+          onPlanCreatedRef.current(planId)
         }
-        onGeneratePlan(plan)
+        onGeneratePlanRef.current(plan)
         setStatus('done')
       } catch (err) {
         if (!cancelled) {
@@ -74,7 +83,7 @@ export function GeneratePlanPage({
 
     run()
     return () => { cancelled = true }
-  }, [farm, farmId, selectedCropIds, goalData, generatedPlan, onFarmCreated, onGeneratePlan, onPlanCreated])
+  }, [farm, farmId, selectedCropIds, goalData, generatedPlan])
 
   const selectedCrops = cropLibrary.filter((crop) => selectedCropIds.includes(crop.id))
 
@@ -94,7 +103,7 @@ export function GeneratePlanPage({
           letterSpacing: '0.05em',
           marginBottom: 'var(--space-2)',
         }}>
-          STEP 3 OF 3 — GENERATE PLAN
+          STEP 4 OF 5 — GENERATE PLAN
         </p>
         <h1 style={{
           fontFamily: 'var(--font-mono)',
@@ -201,7 +210,7 @@ export function GeneratePlanPage({
                   Plan generated successfully
                 </p>
                 <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                  {selectedCrops.length} crops across {generatedPlan.rows * generatedPlan.columns} grids
+                  {selectedCrops.length} crops across {generatedPlan.rows * generatedPlan.columns * (generatedPlan.levels || 1)} grids
                   {generatedPlan.expectedRevenue > 0 && ` · $${generatedPlan.expectedRevenue.toFixed(0)}/week`}
                 </p>
               </div>

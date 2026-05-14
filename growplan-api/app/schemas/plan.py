@@ -69,6 +69,7 @@ class PlanResponse(BaseModel):
     status: str
     rows: int | None = None
     columns: int | None = None
+    levels: int = 1
     total_grids: int | None = Field(None, alias="totalGrids")
     cells: list[GridCellResponse] = []
     allocations: list[AllocationResponse] = []

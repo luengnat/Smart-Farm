@@ -8,7 +8,7 @@ type SetupProgressProps = {
 
 export function SetupProgress({ activeStep, steps }: SetupProgressProps) {
   const completed = Math.max(0, Math.min(activeStep, steps.length))
-  const progressWidth = `${(completed / steps.length) * 100}%`
+  const progressWidth = steps.length > 0 ? `${(completed / steps.length) * 100}%` : '0%'
 
   return (
     <aside className="setup-sidebar">

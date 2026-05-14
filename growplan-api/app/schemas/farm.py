@@ -7,6 +7,7 @@ class FarmCreate(BaseModel):
     location: str | None = None
     rows: int = Field(ge=1)
     columns: int = Field(ge=1)
+    levels: int = Field(ge=1, le=10, default=1)
     growing_system: str = "hydroponic"
     nursery_tray_count: int = Field(ge=1, alias="nurseryTrayCount")
     nursery_tray_cells: int = Field(ge=1, default=200, alias="nurseryTrayCells")
@@ -19,6 +20,7 @@ class FarmUpdate(BaseModel):
     location: str | None = None
     rows: int | None = Field(ge=1, default=None)
     columns: int | None = Field(ge=1, default=None)
+    levels: int | None = Field(ge=1, le=10, default=None)
     growing_system: str | None = None
     nursery_tray_count: int | None = Field(ge=1, default=None, alias="nurseryTrayCount")
     nursery_tray_cells: int | None = Field(ge=1, default=None, alias="nurseryTrayCells")
@@ -32,6 +34,7 @@ class FarmResponse(BaseModel):
     location: str | None
     rows: int
     columns: int
+    levels: int = 1
     growing_system: str = Field(alias="growingSystem")
     nursery_tray_count: int = Field(alias="nurseryTrayCount")
     nursery_tray_cells: int = Field(alias="nurseryTrayCells")

@@ -212,6 +212,7 @@ def get_plan(plan_id: int, current_user: User = Depends(get_current_user), db: S
         status=plan.status,
         rows=farm.rows if farm else None,
         columns=farm.columns if farm else None,
+        levels=getattr(farm, "levels", 1) if farm else 1,
         total_grids=plan.total_grids,
         cells=[
             GridCellResponse(
@@ -263,6 +264,8 @@ def advance_week(plan_id: int, current_user: User = Depends(get_current_user), d
         raise HTTPException(
             status_code=400, detail="Can only advance confirmed plans"
         )
+    # Re-query with row lock to prevent concurrent advance race
+    plan = db.query(Plan).filter(Plan.id == plan_id).with_for_update().first()
     _create_snapshot(plan, "week-advanced", db)
     plan.current_week += 1
     _persist_actions(plan, db)

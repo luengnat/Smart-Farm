@@ -17,10 +17,11 @@ type SetupFarmPageProps = {
 
 type ZoneTool = 'lighting' | 'irrigation'
 
-const createDefaultLightingAssignments = (rows: number, columns: number, lightingZones: number) => {
-  const totalGrids = rows * columns
+const createDefaultLightingAssignments = (rows: number, columns: number, levels: number, lightingZones: number) => {
+  const totalGrids = rows * columns * levels
+  const cellsPerLevel = rows * columns
   return Array.from({ length: totalGrids }, (_, idx) => {
-    const rowIndex = Math.floor(idx / columns)
+    const rowIndex = Math.floor((idx % cellsPerLevel) / columns)
     return Math.min(lightingZones, Math.floor((rowIndex * lightingZones) / rows) + 1)
   })
 }
@@ -28,11 +29,13 @@ const createDefaultLightingAssignments = (rows: number, columns: number, lightin
 const createDefaultIrrigationAssignments = (
   rows: number,
   columns: number,
+  levels: number,
   irrigationZones: number,
 ) => {
-  const totalGrids = rows * columns
+  const totalGrids = rows * columns * levels
+  const cellsPerLevel = rows * columns
   return Array.from({ length: totalGrids }, (_, idx) => {
-    const colIndex = idx % columns
+    const colIndex = (idx % cellsPerLevel) % columns
     return Math.min(irrigationZones, Math.floor((colIndex * irrigationZones) / columns) + 1)
   })
 }
@@ -85,6 +88,7 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
   const [farmLocation, setFarmLocation] = useState(initialData.farmLocation)
   const [rows, setRows] = useState(initialData.rows)
   const [columns, setColumns] = useState(initialData.columns)
+  const [levels, setLevels] = useState(initialData.levels)
   const [lightingZones, setLightingZones] = useState(initialData.lightingZones)
   const [irrigationZones, setIrrigationZones] = useState(initialData.irrigationZones)
   const [nurseryCapacity, setNurseryCapacity] = useState(initialData.nurseryCapacity)
@@ -94,16 +98,16 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
   const [activeLightingZone, setActiveLightingZone] = useState(1)
   const [activeIrrigationZone, setActiveIrrigationZone] = useState(1)
   const [lightingAssignments, setLightingAssignments] = useState<number[]>(() => {
-    const totalGrids = initialData.rows * initialData.columns
+    const totalGrids = initialData.rows * initialData.columns * initialData.levels
     if (initialData.lightingAssignments.length === totalGrids) {
       return initialData.lightingAssignments.map((zone) =>
         Math.min(Math.max(zone, 1), initialData.lightingZones),
       )
     }
-    return createDefaultLightingAssignments(initialData.rows, initialData.columns, initialData.lightingZones)
+    return createDefaultLightingAssignments(initialData.rows, initialData.columns, initialData.levels, initialData.lightingZones)
   })
   const [irrigationAssignments, setIrrigationAssignments] = useState<number[]>(() => {
-    const totalGrids = initialData.rows * initialData.columns
+    const totalGrids = initialData.rows * initialData.columns * initialData.levels
     if (initialData.irrigationAssignments.length === totalGrids) {
       return initialData.irrigationAssignments.map((zone) =>
         Math.min(Math.max(zone, 1), initialData.irrigationZones),
@@ -112,27 +116,28 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
     return createDefaultIrrigationAssignments(
       initialData.rows,
       initialData.columns,
+      initialData.levels,
       initialData.irrigationZones,
     )
   })
   const [dragStartIdx, setDragStartIdx] = useState<number | null>(null)
   const [dragCurrentIdx, setDragCurrentIdx] = useState<number | null>(null)
 
-  const totalGrids = useMemo(() => rows * columns, [rows, columns])
+  const totalGrids = useMemo(() => rows * columns * levels, [rows, columns, levels])
 
   useEffect(() => {
     setLightingAssignments((prev) => {
       if (prev.length !== totalGrids) {
-        return createDefaultLightingAssignments(rows, columns, lightingZones)
+        return createDefaultLightingAssignments(rows, columns, levels, lightingZones)
       }
       return prev.map((zone) => Math.min(Math.max(zone, 1), lightingZones))
     })
-  }, [columns, lightingZones, rows, totalGrids])
+  }, [columns, levels, lightingZones, rows, totalGrids])
 
   useEffect(() => {
     setIrrigationAssignments((prev) => {
       if (prev.length !== totalGrids) {
-        return createDefaultIrrigationAssignments(rows, columns, irrigationZones)
+        return createDefaultIrrigationAssignments(rows, columns, levels, irrigationZones)
       }
       return prev.map((zone) => Math.min(Math.max(zone, 1), irrigationZones))
     })
@@ -206,8 +211,8 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
   }
 
   const resetZones = () => {
-    const nextLighting = createDefaultLightingAssignments(rows, columns, lightingZones)
-    const nextIrrigation = createDefaultIrrigationAssignments(rows, columns, irrigationZones)
+    const nextLighting = createDefaultLightingAssignments(rows, columns, levels, lightingZones)
+    const nextIrrigation = createDefaultIrrigationAssignments(rows, columns, levels, irrigationZones)
     setLightingAssignments(nextLighting)
     setIrrigationAssignments(nextIrrigation)
     setDragStartIdx(null)
@@ -227,14 +232,17 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
   }
 
   const handleContinue = () => {
+    const name = farmName.trim()
+    if (!name) return
     onContinue({
-      farmName: farmName.trim() || 'AgriMatrix Farm',
-      farmLocation: farmLocation.trim() || 'Bangkok',
-      rows,
-      columns,
+      farmName: name,
+      farmLocation: farmLocation.trim(),
+      rows: Math.max(2, Math.min(20, rows)),
+      columns: Math.max(2, Math.min(20, columns)),
+      levels: Math.max(1, Math.min(10, levels)),
       lightingZones,
       irrigationZones,
-      nurseryCapacity,
+      nurseryCapacity: Math.max(1, nurseryCapacity),
       seedlingLeadDays,
       growingSystem,
       lightingAssignments,
@@ -271,7 +279,7 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
             textTransform: 'uppercase',
           }}
         >
-          Step 1 of 3 &mdash; Farm Setup
+          Step 1 of 5 &mdash; Farm Setup
         </span>
         <span
           style={{
@@ -365,7 +373,7 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
                 min={4}
                 max={20}
                 value={rows}
-                onChange={(e) => setRows(Number(e.target.value) || 4)}
+                onChange={(e) => setRows(Math.max(2, Math.min(20, Number(e.target.value) || 4)))}
               />
             </div>
             <div className="input-group">
@@ -377,8 +385,27 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
                 min={4}
                 max={20}
                 value={columns}
-                onChange={(e) => setColumns(Number(e.target.value) || 4)}
+                onChange={(e) => setColumns(Math.max(2, Math.min(20, Number(e.target.value) || 4)))}
               />
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label className="input-label" htmlFor="levels">Levels / Shelves</label>
+            <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+              <input
+                id="levels"
+                className="input-field mono"
+                type="number"
+                min={1}
+                max={10}
+                value={levels}
+                onChange={(e) => setLevels(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
+                style={{ width: 80 }}
+              />
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                Vertical shelves per row-column position
+              </span>
             </div>
           </div>
 
@@ -488,7 +515,7 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
             <button type="button" className="btn btn-ghost" onClick={onBackToWelcome}>
               Back
             </button>
-            <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={handleContinue}>
+            <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={handleContinue} disabled={!farmName.trim()}>
               Save &amp; Continue
             </button>
           </div>
@@ -517,7 +544,7 @@ export function SetupFarmPage({ initialData, onBackToWelcome, onContinue }: Setu
             <div>
               <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }}>Farm Layout Preview</div>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', ...mono }}>
-                {rows} x {columns} &middot; {totalGrids} grids
+                {rows} x {columns} x {levels} &middot; {totalGrids} grids
               </div>
             </div>
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
